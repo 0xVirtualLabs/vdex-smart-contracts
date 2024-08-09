@@ -71,6 +71,7 @@ library Crypto {
         uint32 signatureId;
         address addr;
         Balance[] balances;
+        Position[] positions;
         string sigType;
         uint256 timestamp;
     }
@@ -116,35 +117,16 @@ library Crypto {
      */
     function decodeSchnorrData(
         bytes memory _data
-    ) public pure returns (SchnorrData memory) {
+    ) external pure returns (SchnorrData memory) {
         (
             uint32 signatureId,
             address addr,
             Balance[] memory balances,
-            string memory sigType,
-            uint256 timestamp
-        ) = abi.decode(_data, (uint32, address, Balance[], string, uint256));
-        return SchnorrData(signatureId, addr, balances, sigType, timestamp);
-    }
-
-    function decodeClosePositionSchnorrData(
-        bytes memory _data
-    ) public pure returns (ClosePositionSchnorrData memory) {
-        (
-            uint32 signatureId,
-            address addr,
             Position[] memory positions,
             string memory sigType,
             uint256 timestamp
-        ) = abi.decode(_data, (uint32, address, Position[], string, uint256));
-        return
-            ClosePositionSchnorrData(
-                signatureId,
-                addr,
-                positions,
-                sigType,
-                timestamp
-            );
+        ) = abi.decode(_data, (uint32, address, Balance[], Position[], string, uint256));
+        return SchnorrData(signatureId, addr, balances, positions, sigType, timestamp);
     }
 
     /**
@@ -155,7 +137,7 @@ library Crypto {
      */
     function decodeSchnorrDataWithdraw(
         bytes memory _data
-    ) public pure returns (SchnorrDataWithdraw memory) {
+    ) external pure returns (SchnorrDataWithdraw memory) {
         (address trader, address token, uint256 amount, uint64 timestamp) = abi
             .decode(_data, (address, address, uint256, uint64));
         return SchnorrDataWithdraw(trader, token, amount, timestamp);
@@ -171,7 +153,7 @@ library Crypto {
         bytes32 _digest,
         bytes calldata _signature,
         address _trustedSigner
-    ) pure internal {
+    ) pure external {
         // if (_signatureUsed[_signature]) {
         //     revert InvalidUsedSignature();
         // }
@@ -192,7 +174,7 @@ library Crypto {
 
     function _splitSignature(
         bytes memory sig
-    ) internal pure returns (bytes32 r, bytes32 s, uint8 v) {
+    ) public pure returns (bytes32 r, bytes32 s, uint8 v) {
         require(sig.length == 65, "invalid signature length");
 
         assembly {
@@ -212,7 +194,7 @@ library Crypto {
     function _verifySchnorrSignature(
         SchnorrSignature memory _schnorr,
         address _combinedPublicKey
-    ) internal pure returns (bool) {
+    ) external pure returns (bool) {
         // if (_schnorrSignatureUsed[_schnorr.signature]) {
         //     revert InvalidSchnorrSignature();
         // }

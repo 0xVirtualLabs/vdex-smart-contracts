@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IOracle} from "./IOracle.sol";
+import {Crypto} from "./libs/Crypto.sol";
 
 /**
  * @custom:oz-upgrades-from Vault
@@ -32,12 +33,6 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     struct TokenBalance {
         address token;
         uint256 balance;
-    }
-
-    struct WithdrawTrustlesslyParams {
-        TokenBalance[] tokenBalances;
-        uint64 timestamp;
-        SchnorrSignature schnorr;
     }
 
     event Deposited(
@@ -73,20 +68,7 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     error DisputeChallengeFailed();
     error SettleDisputeFailed();
 
-    struct SchnorrSignature {
-        bytes data;
-        bytes signature;
-        address combinedPublicKey;
-    }
-
     struct WithdrawParams {
-        address trader;
-        address token;
-        uint256 amount;
-        uint64 timestamp;
-    }
-
-    struct SchnorrDataWithdraw {
         address trader;
         address token;
         uint256 amount;
@@ -101,37 +83,6 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint64 timestamp;
     }
 
-    struct Balance {
-        address addr;
-        uint256 balance;
-    }
-
-    struct Position {
-        uint256 positionId;
-        address token;
-        uint256 quantity;
-        bool isLong;
-        uint256 margin;
-        uint256 entryPrice;
-        uint256 createdTimestamp;
-    }
-
-    struct SchnorrData {
-        uint32 signatureId;
-        address addr;
-        Balance[] balances;
-        string sigType;
-        uint256 timestamp;
-    }
-
-    struct ClosePositionSchnorrData {
-        uint32 signatureId;
-        address addr;
-        Position[] positions;
-        string sigType;
-        uint256 timestamp;
-    }
-
     enum DisputeStatus {
         None,
         Opened,
@@ -143,7 +94,7 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address user;
         address challenger;
         uint64 timestamp;
-        Balance[] balances;
+        Crypto.Balance[] balances;
         uint8 status;
         uint32 sessionId;
     }
@@ -152,7 +103,7 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address user;
         address challenger;
         uint64 timestamp;
-        Position[] positions;
+        Crypto.Position[] positions;
         uint8 status;
         uint32 sessionId;
     }
@@ -205,7 +156,7 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             )
         );
 
-        _verifySignature(_digest, signature);
+        Crypto._verifySignature(_digest, signature, _trustedSigner);
 
         require(
             IERC20(withdrawParams.token).transfer(
@@ -220,17 +171,21 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     function withdrawSchnorr(
         address _combinedPublicKey,
-        SchnorrSignature calldata _schnorr
+        Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant {
-        if (!_verifySchnorrSignature(_schnorr, combinedPublicKey[msg.sender])) {
+        if (
+            !Crypto._verifySchnorrSignature(
+                _schnorr,
+                combinedPublicKey[msg.sender]
+            )
+        ) {
             revert InvalidSchnorrSignature();
         }
 
-        SchnorrDataWithdraw memory schnorrData = decodeSchnorrDataWithdraw(
-            _schnorr.data
-        );
+        Crypto.SchnorrDataWithdraw memory schnorrData = Crypto
+            .decodeSchnorrDataWithdraw(_schnorr.data);
 
-        require(schnorrData.amount > 0, "Amount must be greater than zero");
+        require(schnorrData.amount > 0, "Amount must byese greater than zero");
         require(isTokenSupported(schnorrData.token), "Token not supported");
 
         require(
@@ -285,36 +240,6 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         return false;
     }
 
-    function openClosePositionRequest(
-        SchnorrSignature calldata _schnorr
-    ) external nonReentrant {
-        if (!_verifySchnorrSignature(_schnorr, combinedPublicKey[msg.sender])) {
-            revert InvalidSchnorrSignature();
-        }
-
-        ClosePositionSchnorrData
-            memory schnorrData = decodeClosePositionSchnorrData(_schnorr.data);
-
-        if (schnorrData.addr != msg.sender) {
-            revert InvalidSchnorrSignature();
-        }
-
-        _requestIdCounter = _requestIdCounter + 1;
-        uint32 requestId = _requestIdCounter;
-        _positionDisputes[requestId].timestamp = uint64(block.timestamp);
-        uint256 len = schnorrData.positions.length;
-        for (uint256 i = 0; i < len; i++) {
-            _positionDisputes[requestId].positions.push(
-                schnorrData.positions[i]
-            );
-        }
-
-        uint32 signatureId = schnorrData.signatureId;
-        _latestSchnorrSignatureId[requestId] = signatureId;
-
-        _openDispute(requestId, msg.sender);
-    }
-
     function challengeClosePosition(
         uint32 requestId,
         OraclePrice[] memory oraclePrices,
@@ -327,7 +252,7 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "Invalid dispute status"
         );
         require(
-            block.timestamp < dispute.timestamp + 2 days,
+            block.timestamp < dispute.timestamp + 7 days,
             "Dispute window closed"
         );
 
@@ -335,20 +260,14 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         for (uint i = 0; i < oraclePrices.length; i++) {
             encodedOraclePrices = abi.encodePacked(
                 encodedOraclePrices,
-                oraclePrices[i].positionId
-            );
-            encodedOraclePrices = abi.encodePacked(
-                encodedOraclePrices,
-                oraclePrices[i].price
-            );
-            encodedOraclePrices = abi.encodePacked(
-                encodedOraclePrices,
+                oraclePrices[i].positionId,
+                oraclePrices[i].price,
                 oraclePrices[i].timestamp
             );
         }
         // verify signature
         bytes32 _digest = keccak256(encodedOraclePrices);
-        _verifySignature(_digest, oracleEcdsaSignature);
+        Crypto._verifySignature(_digest, oracleEcdsaSignature, _trustedSigner);
 
         // loop all position, remove liquidated positions
         for (uint i = 0; i < oraclePrices.length; i++) {
@@ -387,89 +306,102 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit DisputeChallenged(requestId, msg.sender);
     }
 
-    function settleClosePositionDispute(
-        uint32 requestId
-    ) external nonReentrant {
-        ClosePositionDispute storage dispute = _positionDisputes[requestId];
+    // function settleClosePositionDispute(
+    //     uint32 requestId
+    // ) external nonReentrant {
+    //     ClosePositionDispute storage dispute = _positionDisputes[requestId];
 
-        require(
-            dispute.status == uint8(DisputeStatus.Challenged),
-            "Invalid dispute status"
-        );
-        require(
-            block.timestamp > dispute.timestamp + 2 days,
-            "Dispute window closed"
-        );
-        // loop all positions, fetch oracle price, and return token amount after closing position
-        for (uint i = 0; i < dispute.positions.length; i++) {
-            if (dispute.positions[i].quantity == 0) {
-                continue;
-            }
-            uint256 price = IOracle(oracle).getPrice(
-                dispute.positions[i].token
-            );
-            // close position
-            int256 priceChange = int256(price) -
-                int256(dispute.positions[i].entryPrice);
-            uint256 pnl = 0;
-            uint256 leverage = (dispute.positions[i].margin * ONE) /
-                dispute.positions[i].quantity;
-            if (priceChange > 0) {
-                // win
-                pnl =
-                    (ONE +
-                        ((leverage * uint256(priceChange) * ONE) /
-                            dispute.positions[i].entryPrice) /
-                        ONE) *
-                    dispute.positions[i].quantity;
-                dispute.positions[i].quantity += pnl / ONE;
-            } else {
-                // loss
-                pnl =
-                    (ONE -
-                        ((leverage * uint256(priceChange) * ONE) /
-                            dispute.positions[i].entryPrice) /
-                        ONE) *
-                    dispute.positions[i].quantity;
-                dispute.positions[i].quantity -= pnl / ONE;
-            }
-            // transfer token
-            IERC20(dispute.positions[0].token).transfer(
-                dispute.user,
-                dispute.positions[0].quantity
-            );
-            emit PositionClosed(dispute.positions[i].positionId, pnl / ONE);
-        }
+    //     require(
+    //         dispute.status == uint8(DisputeStatus.Challenged),
+    //         "Invalid dispute status"
+    //     );
+    //     require(
+    //         block.timestamp > dispute.timestamp + 2 days,
+    //         "Dispute window closed"
+    //     );
+    //     // loop all positions, fetch oracle price, and return token amount after closing position
+    //     for (uint i = 0; i < dispute.positions.length; i++) {
+    //         if (dispute.positions[i].quantity == 0) {
+    //             continue;
+    //         }
+    //         uint256 price = IOracle(oracle).getPrice(
+    //             dispute.positions[i].token
+    //         );
+    //         // close position
+    //         int256 priceChange = int256(price) -
+    //             int256(dispute.positions[i].entryPrice);
+    //         uint256 pnl = 0;
+    //         uint256 leverage = (dispute.positions[i].margin * ONE) /
+    //             dispute.positions[i].quantity;
+    //         if (priceChange > 0) {
+    //             // win
+    //             pnl =
+    //                 (ONE +
+    //                     ((leverage * uint256(priceChange) * ONE) /
+    //                         dispute.positions[i].entryPrice) /
+    //                     ONE) *
+    //                 dispute.positions[i].quantity;
+    //             dispute.positions[i].quantity += pnl / ONE;
+    //         } else {
+    //             // loss
+    //             pnl =
+    //                 (ONE -
+    //                     ((leverage * uint256(priceChange) * ONE) /
+    //                         dispute.positions[i].entryPrice) /
+    //                     ONE) *
+    //                 dispute.positions[i].quantity;
+    //             dispute.positions[i].quantity -= pnl / ONE;
+    //         }
+    //         // transfer token
+    //         IERC20(dispute.positions[0].token).transfer(
+    //             dispute.user,
+    //             dispute.positions[0].quantity
+    //         );
+    //         emit PositionClosed(dispute.positions[i].positionId, pnl / ONE);
+    //     }
 
-        dispute.status = uint8(DisputeStatus.Settled);
-        emit DisputeSettled(requestId, msg.sender);
-    }
+    //     dispute.status = uint8(DisputeStatus.Settled);
+    //     emit DisputeSettled(requestId, msg.sender);
+    // }
 
     function withdrawTrustlessly(
-        SchnorrSignature calldata _schnorr
+        Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant {
-        if (!_verifySchnorrSignature(_schnorr, combinedPublicKey[msg.sender])) {
+        if (
+            !Crypto._verifySchnorrSignature(
+                _schnorr,
+                combinedPublicKey[msg.sender]
+            )
+        ) {
             revert InvalidSchnorrSignature();
         }
 
-        SchnorrData memory schnorrData = decodeSchnorrData(_schnorr.data);
+        Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
+            _schnorr.data
+        );
 
         if (schnorrData.addr != msg.sender) {
             revert InvalidSchnorrSignature();
         }
 
         _requestIdCounter = _requestIdCounter + 1;
-        uint32 withdrawalId = _requestIdCounter;
-        _disputes[withdrawalId].timestamp = uint64(block.timestamp);
+        uint32 requestId = _requestIdCounter;
+        _disputes[requestId].timestamp = uint64(block.timestamp);
         uint256 len = schnorrData.balances.length;
+        uint256 posLen = schnorrData.positions.length;
+        for (uint256 i = 0; i < posLen; i++) {
+            _positionDisputes[requestId].positions.push(
+                schnorrData.positions[i]
+            );
+        }
         for (uint256 i = 0; i < len; i++) {
-            _disputes[withdrawalId].balances.push(schnorrData.balances[i]);
+            _disputes[requestId].balances.push(schnorrData.balances[i]);
         }
 
         uint32 signatureId = schnorrData.signatureId;
-        _latestSchnorrSignatureId[withdrawalId] = signatureId;
+        _latestSchnorrSignatureId[requestId] = signatureId;
 
-        _openDispute(withdrawalId, msg.sender);
+        _openDispute(requestId, msg.sender);
     }
 
     function _openDispute(uint32 withdrawalId, address user) internal {
@@ -481,12 +413,14 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit DisputeOpened(withdrawalId, user);
     }
 
-    function challengeDispute(
-        uint32 withdrawalId,
-        SchnorrSignature calldata _schnorr
+    function challengeWithdrawalDispute(
+        uint32 requestId,
+        Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant {
-        Dispute storage dispute = _disputes[withdrawalId];
-        SchnorrData memory schnorrData = decodeSchnorrData(_schnorr.data);
+        Dispute storage dispute = _disputes[requestId];
+        Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
+            _schnorr.data
+        );
 
         require(
             dispute.status == uint8(DisputeStatus.Opened),
@@ -498,7 +432,7 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
 
         if (
-            !_verifySchnorrSignature(
+            !Crypto._verifySchnorrSignature(
                 _schnorr,
                 combinedPublicKey[schnorrData.addr]
             )
@@ -508,8 +442,8 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         uint32 signatureId = schnorrData.signatureId;
 
-        if (_latestSchnorrSignatureId[withdrawalId] < schnorrData.signatureId) {
-            _latestSchnorrSignatureId[withdrawalId] = signatureId;
+        if (_latestSchnorrSignatureId[requestId] < schnorrData.signatureId) {
+            _latestSchnorrSignatureId[requestId] = signatureId;
 
             dispute.challenger = msg.sender;
             delete dispute.balances;
@@ -519,15 +453,16 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             }
             dispute.status = uint8(DisputeStatus.Challenged);
 
-            emit DisputeChallenged(withdrawalId, schnorrData.addr);
+            emit DisputeChallenged(requestId, schnorrData.addr);
         } else {
             revert DisputeChallengeFailed();
         }
     }
 
-    function settleDispute(uint32 withdrawalId) external nonReentrant {
-        Dispute storage dispute = _disputes[withdrawalId];
-        if (block.timestamp < dispute.timestamp + 1800) { // fake 30p
+    function settleDispute(uint32 requestId) external nonReentrant {
+        Dispute storage dispute = _disputes[requestId];
+        if (block.timestamp < dispute.timestamp + 1800) {
+            // fake 30 minutes
             require(
                 dispute.status != uint8(DisputeStatus.Challenged),
                 "Invalid dispute status"
@@ -538,7 +473,57 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "Invalid dispute status"
         );
 
-        dispute.status = uint8(DisputeStatus.Settled);
+        ClosePositionDispute storage posDispute = _positionDisputes[requestId];
+
+        require(
+            dispute.status == uint8(DisputeStatus.Challenged),
+            "Invalid dispute status"
+        );
+        require(
+            block.timestamp > dispute.timestamp + 2 days,
+            "Dispute window closed"
+        );
+        // loop all positions, fetch oracle price, and return token amount after closing position
+        for (uint i = 0; i < posDispute.positions.length; i++) {
+            if (posDispute.positions[i].quantity == 0) {
+                continue;
+            }
+            uint256 price = IOracle(oracle).getPrice(
+                posDispute.positions[i].token
+            );
+            // close position
+            int256 priceChange = int256(price) -
+                int256(posDispute.positions[i].entryPrice);
+            uint256 pnl = 0;
+            uint256 leverage = (posDispute.positions[i].margin * ONE) /
+                posDispute.positions[i].quantity;
+            if (priceChange > 0) {
+                // win
+                pnl =
+                    (ONE +
+                        ((leverage * uint256(priceChange) * ONE) /
+                            posDispute.positions[i].entryPrice) /
+                        ONE) *
+                    posDispute.positions[i].quantity;
+                posDispute.positions[i].quantity += pnl / ONE;
+            } else {
+                // loss
+                pnl =
+                    (ONE -
+                        ((leverage * uint256(priceChange) * ONE) /
+                            posDispute.positions[i].entryPrice) /
+                        ONE) *
+                    posDispute.positions[i].quantity;
+                posDispute.positions[i].quantity -= pnl / ONE;
+            }
+
+            // transfer token
+            IERC20(posDispute.positions[i].token).transfer(
+                posDispute.user,
+                posDispute.positions[i].quantity
+            );
+            emit PositionClosed(posDispute.positions[i].positionId, pnl / ONE);
+        }
 
         uint256 len = dispute.balances.length;
 
@@ -549,7 +534,8 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             emit Withdrawn(msg.sender, token, amount);
         }
 
-        emit DisputeSettled(withdrawalId, msg.sender);
+        dispute.status = uint8(DisputeStatus.Settled);
+        emit DisputeSettled(requestId, msg.sender);
     }
 
     /**
@@ -581,158 +567,5 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address _combinedPublicKey
     ) external onlyOwner {
         combinedPublicKey[_user] = _combinedPublicKey;
-    }
-
-    /**
-     * @dev Decodes bytes into Schnorr data.
-     *
-     * @param _data (bytes) The encoded Schnorr data.
-     * @return (SchnorrData) The decoded Schnorr data.
-     */
-    function decodeSchnorrData(
-        bytes memory _data
-    ) public pure returns (SchnorrData memory) {
-        (
-            uint32 signatureId,
-            address addr,
-            Balance[] memory balances,
-            string memory sigType,
-            uint256 timestamp
-        ) = abi.decode(_data, (uint32, address, Balance[], string, uint256));
-        return SchnorrData(signatureId, addr, balances, sigType, timestamp);
-    }
-
-    function decodeClosePositionSchnorrData(
-        bytes memory _data
-    ) public pure returns (ClosePositionSchnorrData memory) {
-        (
-            uint32 signatureId,
-            address addr,
-            Position[] memory positions,
-            string memory sigType,
-            uint256 timestamp
-        ) = abi.decode(_data, (uint32, address, Position[], string, uint256));
-        return
-            ClosePositionSchnorrData(
-                signatureId,
-                addr,
-                positions,
-                sigType,
-                timestamp
-            );
-    }
-
-    /**
-     * @dev Decodes bytes into Schnorr data.
-     *
-     * @param _data (bytes) The encoded Schnorr data.
-     * @return (SchnorrData) The decoded Schnorr data.
-     */
-    function decodeSchnorrDataWithdraw(
-        bytes memory _data
-    ) public pure returns (SchnorrDataWithdraw memory) {
-        (address trader, address token, uint256 amount, uint64 timestamp) = abi
-            .decode(_data, (address, address, uint256, uint64));
-        return SchnorrDataWithdraw(trader, token, amount, timestamp);
-    }
-
-    //  /**
-    //  * @dev Internal function to check the validity of a signature against a digest and mark the signature as used.
-    //  *
-    //  * @param _digest (bytes32) The digest to be signed.
-    //  * @param _signature (bytes) The signature to be verified.
-    //  */
-    function _verifySignature(
-        bytes32 _digest,
-        bytes calldata _signature
-    ) internal {
-        if (_signatureUsed[_signature]) {
-            revert InvalidUsedSignature();
-        }
-
-        bytes32 _ethSignedMessage = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", _digest)
-        );
-
-        (bytes32 r, bytes32 s, uint8 v) = _splitSignature(_signature);
-
-        address signer = ecrecover(_ethSignedMessage, v, r, s);
-
-        if (signer != _trustedSigner) {
-            revert InvalidSignature();
-        }
-        _signatureUsed[_signature] = true;
-    }
-
-    function _splitSignature(
-        bytes memory sig
-    ) internal pure returns (bytes32 r, bytes32 s, uint8 v) {
-        require(sig.length == 65, "invalid signature length");
-
-        assembly {
-            r := mload(add(sig, 32))
-            s := mload(add(sig, 64))
-            v := byte(0, mload(add(sig, 96)))
-        }
-    }
-
-    /**
-     * @dev Internal function to verify a Schnorr signature.
-     *
-     * @param _schnorr (SchnorrSignature) The Schnorr signature to be verified.
-     *
-     * @return (bool) True if the Schnorr signature is valid, otherwise false.
-     */
-    function _verifySchnorrSignature(
-        SchnorrSignature memory _schnorr,
-        address _combinedPublicKey
-    ) internal returns (bool) {
-        if (_schnorrSignatureUsed[_schnorr.signature]) {
-            revert InvalidSchnorrSignature();
-        }
-
-        if (_schnorr.combinedPublicKey != _combinedPublicKey) {
-            revert InvalidSchnorrSignature();
-        }
-
-        if (_schnorr.signature.length != 128) {
-            revert InvalidSchnorrSignature();
-        }
-
-        (bytes32 px, bytes32 e, bytes32 s, uint8 parity) = abi.decode(
-            _schnorr.signature,
-            (bytes32, bytes32, bytes32, uint8)
-        );
-        bytes32 sp = bytes32(
-            SECP256K1_CURVE_N -
-                mulmod(uint256(s), uint256(px), SECP256K1_CURVE_N)
-        );
-        bytes32 ep = bytes32(
-            SECP256K1_CURVE_N -
-                mulmod(uint256(e), uint256(px), SECP256K1_CURVE_N)
-        );
-
-        if (sp == 0) {
-            revert InvalidSP();
-        }
-
-        address R = ecrecover(sp, parity, px, ep);
-        if (R == address(0)) {
-            revert ECRecoverFailed();
-        }
-
-        if (
-            e ==
-            keccak256(
-                abi.encodePacked(R, uint8(parity), px, keccak256(_schnorr.data))
-            ) &&
-            address(uint160(uint256(px))) == _schnorr.combinedPublicKey
-        ) {
-            _schnorrSignatureUsed[_schnorr.signature] = true;
-
-            return true;
-        }
-
-        return false;
     }
 }
