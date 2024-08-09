@@ -364,7 +364,7 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     //     emit DisputeSettled(requestId, msg.sender);
     // }
 
-    function withdrawTrustlessly(
+    function withdrawAndClosePositionTrustlessly(
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant {
         if (
@@ -404,13 +404,18 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _openDispute(requestId, msg.sender);
     }
 
-    function _openDispute(uint32 withdrawalId, address user) internal {
-        Dispute storage dispute = _disputes[withdrawalId];
+    function _openDispute(uint32 requestId, address user) internal {
+        Dispute storage dispute = _disputes[requestId];
+        ClosePositionDispute storage posDispute = _positionDisputes[requestId];
+
 
         dispute.status = uint8(DisputeStatus.Opened);
         dispute.user = user;
 
-        emit DisputeOpened(withdrawalId, user);
+        posDispute.status = uint8(DisputeStatus.Opened);
+        posDispute.user = user;
+
+        emit DisputeOpened(requestId, user);
     }
 
     function challengeWithdrawalDispute(
@@ -461,28 +466,17 @@ contract Vault is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     function settleDispute(uint32 requestId) external nonReentrant {
         Dispute storage dispute = _disputes[requestId];
-        if (block.timestamp < dispute.timestamp + 1800) {
-            // fake 30 minutes
-            require(
-                dispute.status != uint8(DisputeStatus.Challenged),
-                "Invalid dispute status"
-            );
-        }
-        require(
-            dispute.status != uint8(DisputeStatus.Settled),
-            "Invalid dispute status"
-        );
-
-        ClosePositionDispute storage posDispute = _positionDisputes[requestId];
-
         require(
             dispute.status == uint8(DisputeStatus.Challenged),
             "Invalid dispute status"
         );
         require(
-            block.timestamp > dispute.timestamp + 2 days,
+            block.timestamp > dispute.timestamp + 1800, // fake 30m
             "Dispute window closed"
         );
+
+        ClosePositionDispute storage posDispute = _positionDisputes[requestId];
+
         // loop all positions, fetch oracle price, and return token amount after closing position
         for (uint i = 0; i < posDispute.positions.length; i++) {
             if (posDispute.positions[i].quantity == 0) {
