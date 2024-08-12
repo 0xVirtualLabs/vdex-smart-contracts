@@ -34,6 +34,10 @@ contract Vault is
     address[] private supportedTokens;
     address public oracle;
     uint256 constant ONE = 1e9;
+    // for adding LP
+    mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
+    mapping(address => bool) public isLPProvider;
+    mapping(address => uint256) public lpProvidedAmount; // token => amount
 
     struct TokenBalance {
         address token;
@@ -63,6 +67,8 @@ contract Vault is
     event PositionClosed(uint256 positionId, uint256 tokenAmount);
     event TokenAdded(address indexed token);
     event TokenRemoved(address indexed token);
+    event LPProvided(address indexed user, address indexed token, uint256 amount);
+    event LPWithdrawn(address indexed user, address indexed token, uint256 amount);
 
     error InvalidSignature();
     error InvalidUsedSignature();
@@ -130,6 +136,40 @@ contract Vault is
         signatureExpiryTime = _signatureExpiryTime;
     }
 
+    function setLPProvider(address[] calldata lpProvider, bool[] calldata isProvider) external {
+        require(lpProvider.length == isProvider.length, "Invalid input");
+        for (uint256 i = 0; i < lpProvider.length; i++) {
+            isLPProvider[lpProvider[i]] = isProvider[i];
+        }
+    }
+
+    function provideLiquidity(address token, uint256 amount) external {
+        require(isLPProvider[msg.sender], "Not LP provider");
+        require(amount > 0, "Amount must be greater than zero");
+        require(isTokenSupported(token), "Token not supported");
+
+        require(
+            IERC20(token).transferFrom(msg.sender, address(this), amount),
+            "Transfer failed"
+        );
+
+        lpProvidedAmount[token] += amount;
+        emit LPProvided(msg.sender, token, lpProvidedAmount[token]);
+    }
+
+    function withdrawAllLiquidity(address token) external {
+        require(isLPProvider[msg.sender], "Not LP provider");
+        require(isTokenSupported(token), "Token not supported");
+        require(
+            IERC20(token).transfer(msg.sender, lpProvidedAmount[token]),
+            "Transfer failed"
+        );
+
+        lpProvidedAmount[token] = 0;
+
+        emit LPWithdrawn(msg.sender, token, lpProvidedAmount[token]);
+    }
+
     function deposit(
         address token,
         uint256 amount
@@ -142,6 +182,7 @@ contract Vault is
             "Transfer failed"
         );
 
+        depositedAmount[msg.sender][token] += amount;
         emit Deposited(msg.sender, token, amount);
     }
 
@@ -592,6 +633,14 @@ contract Vault is
         for (uint256 i = 0; i < len; i++) {
             address token = dispute.balances[i].addr;
             uint256 amount = dispute.balances[i].balance;
+            uint256 pnl = amount - depositedAmount[dispute.user][dispute.balances[0].addr];
+            depositedAmount[dispute.user][dispute.balances[0].addr] = 0;
+            if (pnl > 0) {
+              require(lpProvidedAmount[token] >= pnl, "Insufficient liquidity");
+              lpProvidedAmount[token] -= pnl;
+            } else {
+              lpProvidedAmount[token] += pnl;
+            }
             IERC20(token).transfer(dispute.user, amount);
             emit Withdrawn(msg.sender, token, amount);
         }
