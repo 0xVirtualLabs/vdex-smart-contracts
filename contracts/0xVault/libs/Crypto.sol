@@ -57,12 +57,18 @@ library Crypto {
         uint256 balance;
     }
 
+    struct Collateral {
+        address token;
+        uint256 quantity;
+        uint256 entryPrice;
+    }
+
     struct Position {
-        uint256 positionId;
+        string positionId;
         address token;
         uint256 quantity;
         bool isLong;
-        uint256 margin;
+        Collateral[] collaterals;
         uint256 entryPrice;
         uint256 createdTimestamp;
     }
