@@ -9,11 +9,11 @@ const LockModule = buildModule("LockModule", (m) => {
   console.log("🚀 ~ LockModule ~ unlockTime:", unlockTime)
   const lockedAmount = m.getParameter("lockedAmount", ONE_GWEI);
 
-  // const lock = m.contract("Lock", [unlockTime], {
-  //   value: lockedAmount,
-  // });
+  const lock = m.contract("Lock", [unlockTime], {
+    value: lockedAmount,
+  });
 
-  // return { lock };
+  return { lock };
 });
 
 export default LockModule;

@@ -1,5 +1,6 @@
 import type { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox-viem";
+import "@nomicfoundation/hardhat-ignition-viem";
 import "hardhat-contract-sizer";
 import { config as dotenvConfig } from "dotenv";
 import { NetworkUserConfig } from "hardhat/types";
@@ -58,7 +59,7 @@ function getChainConfig(network: keyof typeof chainIds): NetworkUserConfig {
   return {
     accounts: [`0x${deployerPrivateKey}`],
     chainId: chainIds[network],
-    gasPrice: 20000000000,
+    // gasPrice: 20000000000,
     url,
   };
 }

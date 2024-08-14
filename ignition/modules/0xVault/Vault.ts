@@ -11,7 +11,10 @@ const proxyModule = buildModule("ProxyModule", (m) => {
 
   // This is our contract that will be proxied.
   // We will upgrade this contract with a new version later.
-  const vault = m.contract("Vault");
+  const crypto = m.library("Crypto");
+  const vault = m.contract("Vault", [], {
+    libraries: { Crypto: crypto },
+  });
 
   // The TransparentUpgradeableProxy contract creates the ProxyAdmin within its constructor.
   // To read more about how this proxy is implemented, you can view the source code and comments here:
