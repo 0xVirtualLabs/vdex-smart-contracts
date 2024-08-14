@@ -11,7 +11,10 @@ const OnlyVaultModule = buildModule("OnlyVaultModule", (m) => {
   // While we're still using it to create a contract instance, we're now telling Hardhat Ignition
   // to treat the contract at the proxy address as an instance of the Vault contract.
   // This allows us to interact with the underlying Vault contract via the proxy from within tests and scripts.
-  const vault = m.contract("Vault");
+  const crypto = m.library("Crypto");
+  const vault = m.contract("Vault", [], {
+    libraries: { Crypto: crypto },
+  });
 
   // Return the contract instance, along with the original proxy and proxyAdmin contracts
   // so that they can be used by other modules, or in tests and scripts.

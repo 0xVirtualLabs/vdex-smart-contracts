@@ -436,6 +436,10 @@ contract Vault is
             revert InvalidSchnorrSignature();
         }
 
+        if (_schnorrSignatureUsed[_schnorr.signature]) {
+            revert InvalidSchnorrSignature();
+        }
+
         _requestIdCounter = _requestIdCounter + 1;
         uint32 requestId = _requestIdCounter;
         _disputes[requestId].timestamp = uint64(block.timestamp);
@@ -478,6 +482,7 @@ contract Vault is
 
         uint32 signatureId = schnorrData.signatureId;
         _latestSchnorrSignatureId[requestId] = signatureId;
+        _schnorrSignatureUsed[_schnorr.signature] = true;
 
         _openDispute(requestId, msg.sender);
     }
