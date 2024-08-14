@@ -73,13 +73,13 @@ const config: HardhatUserConfig = {
     src: "./contracts",
   },
   networks: {
-    hardhat: {
-      chainId: chainIds.hardhat,
-      accounts: {
-        accountsBalance: "1000000000000000000000000000000",
-      },
-      allowUnlimitedContractSize: true,
-    },
+    // hardhat: {
+    //   chainId: chainIds.hardhat,
+    //   accounts: {
+    //     accountsBalance: "1000000000000000000000000000000",
+    //   },
+    //   allowUnlimitedContractSize: true,
+    // },
     goerli: getChainConfig("goerli"),
     kovan: getChainConfig("kovan"),
     rinkeby: getChainConfig("rinkeby"),

@@ -6,7 +6,8 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {IOracle} from "./IOracle.sol";
+import {IOracle} from "./interfaces/IOracle.sol";
+import {ILpProvider} from "./interfaces/ILpProvider.sol";
 import {Crypto} from "./libs/Crypto.sol";
 
 /**
@@ -36,8 +37,7 @@ contract Vault is
     uint256 constant ONE = 1e9;
     // for adding LP
     mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
-    mapping(address => bool) public isLPProvider;
-    mapping(address => uint256) public lpProvidedAmount; // token => amount
+    address public lpProvider;
 
     struct TokenBalance {
         address token;
@@ -67,8 +67,16 @@ contract Vault is
     event PositionClosed(uint256 positionId, uint256 tokenAmount);
     event TokenAdded(address indexed token);
     event TokenRemoved(address indexed token);
-    event LPProvided(address indexed user, address indexed token, uint256 amount);
-    event LPWithdrawn(address indexed user, address indexed token, uint256 amount);
+    event LPProvided(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
+    event LPWithdrawn(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
 
     error InvalidSignature();
     error InvalidUsedSignature();
@@ -128,46 +136,14 @@ contract Vault is
     function initialize(
         address _owner,
         address trustedSigner,
-        uint256 _signatureExpiryTime
+        uint256 _signatureExpiryTime,
+        address _lpProvider
     ) public initializer {
         OwnableUpgradeable.__Ownable_init(_owner);
         __Pausable_init();
         _trustedSigner = trustedSigner;
         signatureExpiryTime = _signatureExpiryTime;
-    }
-
-    function setLPProvider(address[] calldata lpProvider, bool[] calldata isProvider) external {
-        require(lpProvider.length == isProvider.length, "Invalid input");
-        for (uint256 i = 0; i < lpProvider.length; i++) {
-            isLPProvider[lpProvider[i]] = isProvider[i];
-        }
-    }
-
-    function provideLiquidity(address token, uint256 amount) external {
-        require(isLPProvider[msg.sender], "Not LP provider");
-        require(amount > 0, "Amount must be greater than zero");
-        require(isTokenSupported(token), "Token not supported");
-
-        require(
-            IERC20(token).transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
-
-        lpProvidedAmount[token] += amount;
-        emit LPProvided(msg.sender, token, lpProvidedAmount[token]);
-    }
-
-    function withdrawAllLiquidity(address token) external {
-        require(isLPProvider[msg.sender], "Not LP provider");
-        require(isTokenSupported(token), "Token not supported");
-        require(
-            IERC20(token).transfer(msg.sender, lpProvidedAmount[token]),
-            "Transfer failed"
-        );
-
-        lpProvidedAmount[token] = 0;
-
-        emit LPWithdrawn(msg.sender, token, lpProvidedAmount[token]);
+        lpProvider = _lpProvider;
     }
 
     function deposit(
@@ -184,6 +160,41 @@ contract Vault is
 
         depositedAmount[msg.sender][token] += amount;
         emit Deposited(msg.sender, token, amount);
+    }
+
+    function withdraw(
+        WithdrawParams memory withdrawParams,
+        bytes calldata signature
+    ) external nonReentrant whenNotPaused {
+        require(withdrawParams.amount > 0, "Amount must be greater than zero");
+        require(withdrawParams.trader == msg.sender, "Caller not correct");
+        require(isTokenSupported(withdrawParams.token), "Token not supported");
+
+        require(
+            block.timestamp - withdrawParams.timestamp < signatureExpiryTime,
+            "Signature Expired"
+        );
+
+        bytes32 _digest = keccak256(
+            abi.encode(
+                withdrawParams.trader,
+                withdrawParams.token,
+                withdrawParams.amount,
+                withdrawParams.timestamp
+            )
+        );
+
+        Crypto._verifySignature(_digest, signature, _trustedSigner);
+
+        require(
+            IERC20(withdrawParams.token).transfer(
+                msg.sender,
+                withdrawParams.amount
+            ),
+            "Transfer failed"
+        );
+
+        emit Withdrawn(msg.sender, withdrawParams.token, withdrawParams.amount);
     }
 
     function withdrawSchnorr(
@@ -603,14 +614,21 @@ contract Vault is
         for (uint256 i = 0; i < len; i++) {
             address token = dispute.balances[i].addr;
             uint256 amount = dispute.balances[i].balance;
-            uint256 pnl = amount - depositedAmount[dispute.user][dispute.balances[0].addr];
-            depositedAmount[dispute.user][dispute.balances[0].addr] = 0;
-            if (pnl > 0) {
-              require(lpProvidedAmount[token] >= pnl, "Insufficient liquidity");
-              lpProvidedAmount[token] -= pnl;
+            if (
+                amount > depositedAmount[dispute.user][dispute.balances[0].addr]
+            ) {
+                uint256 pnl = amount -
+                    depositedAmount[dispute.user][dispute.balances[0].addr];
+                ILpProvider(lpProvider).decreaseLpProvidedAmount(token, pnl);
             } else {
-              lpProvidedAmount[token] += pnl;
+                uint256 pnl = depositedAmount[dispute.user][
+                    dispute.balances[0].addr
+                ] - amount;
+                IERC20(token).transfer(lpProvider, pnl);
+                ILpProvider(lpProvider).increaseLpProvidedAmount(token, pnl);
             }
+
+            depositedAmount[dispute.user][dispute.balances[0].addr] = 0;
             IERC20(token).transfer(dispute.user, amount);
             emit Withdrawn(msg.sender, token, amount);
         }
@@ -637,6 +655,13 @@ contract Vault is
         _trustedSigner = _newSigner;
 
         emit TrustedSignerChanged(prevSigner, _newSigner);
+    }
+
+    function setLpProvider(address _lpProvider) external onlyOwner {
+        if (_lpProvider == address(0)) {
+            revert InvalidAddress();
+        }
+        lpProvider = _lpProvider;
     }
 
     function setSignatureExpiryTime(uint256 _expiryTime) external onlyOwner {
