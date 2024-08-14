@@ -7,17 +7,30 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {Crypto} from "./libs/Crypto.sol";
+import {IOracle} from "./interfaces/IOracle.sol";
 
 contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
+    uint256 public constant ONE = 10**18;
     address public vault;
     address private _trustedSigner;
     address public coldWallet;
+    address public oracle;
+    uint256 public startEpochTimestamp;
+    uint256 public epochPeriod;
+    uint256 public withdrawalDelayTime;
 
     mapping(address => bool) public isLPProvider;
     mapping(address => uint256) public lpProvidedAmount;
 
     mapping(address => uint256) public fundAmount;
-    mapping(address => mapping(uint32 => bool)) public usedRn;
+    mapping(address => mapping(address => uint256)) public userNAVs; // token => user => NAV
+    mapping(address => uint256) public navPrices; // token => NAV price in USD
+    mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // token => user => ReqWithdraws
+
+    struct ReqWithdraw {
+        uint256 navAmount;
+        uint256 timestamp;
+    }
 
     event LPProvided(
         address indexed user,
@@ -41,17 +54,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 amount,
         uint256 fundAmount
     );
-    event TrustedSignerChanged(
-        address indexed prevSigner,
-        address indexed newSigner
-    );
-
-    struct WithdrawParams {
-        address lpProvider;
-        address token;
-        uint256 amount;
-        uint32 rn;
-    }
 
     modifier onlyVault() {
         require(msg.sender == vault, "Only vault");
@@ -61,13 +63,19 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     function initialize(
         address _owner,
         address _vault,
-        address _newTrustedSigner,
+        address _oracle,
+        uint256 _epochPeriod,
+        uint256 _startEpochTimestamp,
+        uint256 _withdrawalDelayTime,
         address _coldWallet
     ) public initializer {
         __Ownable_init(_owner);
         __ReentrancyGuard_init();
         vault = _vault;
-        _trustedSigner = _newTrustedSigner;
+        oracle = _oracle;
+        epochPeriod = _epochPeriod;
+        startEpochTimestamp = _startEpochTimestamp;
+        withdrawalDelayTime = _withdrawalDelayTime;
         coldWallet = _coldWallet;
     }
 
@@ -83,64 +91,59 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "Transfer failed"
         );
 
-        fundAmount[token] += amount;
+        uint256 navs = _calcNAVAmount(token, amount);
+        userNAVs[token][msg.sender] += navs;
+        fundAmount[token] += navs;
+        emit DepositFund(msg.sender, token, amount, fundAmount[token]);
+    }
+
+    function _calcNAVAmount(
+        address token,
+        uint256 amount
+    ) private view returns (uint256) {
+        uint256 usdAmount = amount * IOracle(oracle).getPrice(token);
+        return usdAmount * ONE / navPrices[token];
     }
 
     function depositFund(address token, uint256 amount) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
         _depositFund(token, amount);
-        emit DepositFund(msg.sender, token, amount, fundAmount[token]);
     }
 
-    function addTotalFund(address token, uint256 amount) external nonReentrant onlyOwner {
-        _depositFund(token, amount);
-        emit DepositFund(msg.sender, token, amount, fundAmount[token]);
-    }
+    function _withdrawFund(
+        address token,
+        uint256 navsAmount
+    ) private {
+        require(navsAmount > 0, "Amount must be greater than zero");
+        require(userNAVs[token][msg.sender] >= navsAmount, "Insufficient fund");
 
-    function withdrawFund(
-        WithdrawParams memory withdrawParams,
-        bytes calldata signature
-    ) external nonReentrant {
-        require(withdrawParams.amount > 0, "Amount must be greater than zero");
-        require(withdrawParams.lpProvider == msg.sender, "Caller not correct");
-        require(
-            IVault(vault).isTokenSupported(withdrawParams.token),
-            "Token not supported"
-        );
+        userNAVs[token][msg.sender] -= navsAmount;
+        fundAmount[token] -= navsAmount;
+        uint256 tokenAmount = navsAmount / IOracle(oracle).getPrice(token) / ONE;
 
         require(
-            usedRn[withdrawParams.lpProvider][withdrawParams.rn] == false,
-            "Invalid RN"
-        );
-
-        bytes32 _digest = keccak256(
-            abi.encode(
-                withdrawParams.lpProvider,
-                withdrawParams.token,
-                withdrawParams.amount,
-                withdrawParams.rn
-            )
-        );
-
-        _verifySignature(_digest, signature);
-
-        require(
-            IERC20(withdrawParams.token).transfer(
-                msg.sender,
-                withdrawParams.amount
-            ),
+            IERC20(token).transfer(msg.sender, tokenAmount),
             "Transfer failed"
         );
 
-        usedRn[withdrawParams.lpProvider][withdrawParams.rn] = true;
-        fundAmount[withdrawParams.token] -= withdrawParams.amount;
+        emit WithdrawFund(msg.sender, token, tokenAmount, fundAmount[token]);
+    }
 
-        emit WithdrawFund(
-            withdrawParams.lpProvider,
-            withdrawParams.token,
-            withdrawParams.amount,
-            fundAmount[withdrawParams.token]
-        );
+    // new request will override old request
+    function requestWithdrawFund(
+        address token, uint256 navsAmount
+    ) external nonReentrant {
+        require(isLPProvider[msg.sender], "Not LP provider");
+        require(userNAVs[token][msg.sender] >= navsAmount, "Insufficient fund");
+        reqWithdraws[token][msg.sender] = ReqWithdraw(navsAmount, block.timestamp + withdrawalDelayTime);
+    }
+
+    function withdrawFund(
+        address token
+    ) external nonReentrant {
+        require(isLPProvider[msg.sender], "Not LP provider");
+        ReqWithdraw memory reqWithdraw = reqWithdraws[token][msg.sender];
+        _withdrawFund(token, reqWithdraw.navAmount);
     }
 
     function setLPProvider(
@@ -201,14 +204,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         lpProvidedAmount[token] -= amount;
     }
 
-    function setTrustedSigner(address _newSigner) public onlyOwner {
-        require(_newSigner != address(0), "Invalid address");
-        address prevSigner = _trustedSigner;
-        _trustedSigner = _newSigner;
-
-        emit TrustedSignerChanged(prevSigner, _newSigner);
-    }
-
     function setVault(address _vault) external onlyOwner {
         vault = _vault;
     }
@@ -217,36 +212,16 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         coldWallet = _coldWallet;
     }
 
-    //  /**
-    //  * @dev Internal function to check the validity of a signature against a digest and mark the signature as used.
-    //  *
-    //  * @param _digest (bytes32) The digest to be signed.
-    //  * @param _signature (bytes) The signature to be verified.
-    //  */
-    function _verifySignature(
-        bytes32 _digest,
-        bytes calldata _signature
-    ) internal view {
-        bytes32 _ethSignedMessage = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", _digest)
+    function depositRewardForMarketMaker(
+        address token,
+        uint256 amount
+    ) external onlyOwner {
+        require(amount > 0, "Amount must be greater than zero");
+        require(IVault(vault).isTokenSupported(token), "Token not supported");
+
+        require(
+            IERC20(token).transferFrom(msg.sender, address(this), amount),
+            "Transfer failed"
         );
-
-        (bytes32 r, bytes32 s, uint8 v) = _splitSignature(_signature);
-
-        address signer = ecrecover(_ethSignedMessage, v, r, s);
-
-        require(signer == _trustedSigner, "Invalid signature");
-    }
-
-    function _splitSignature(
-        bytes memory sig
-    ) internal pure returns (bytes32 r, bytes32 s, uint8 v) {
-        require(sig.length == 65, "invalid signature length");
-
-        assembly {
-            r := mload(add(sig, 32))
-            s := mload(add(sig, 64))
-            v := byte(0, mload(add(sig, 96)))
-        }
     }
 }
