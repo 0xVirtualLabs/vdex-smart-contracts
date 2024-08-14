@@ -13,8 +13,9 @@ const proxyModule = buildModule("ProxyModule", (m) => {
 
   // This is our contract that will be proxied.
   // We will upgrade this contract with a new version later.
-  // const crypto = m.library("Crypto");
-  const crypto = m.contractAt("Crypto", "0x479deC6c40916Cf6290FA21915bd42CE233c6E55");
+  const proxyAdmin = m.contract("ProxyAdmin", []);
+  const crypto = m.library("Crypto");
+  // const crypto = m.contractAt("Crypto", "0x479deC6c40916Cf6290FA21915bd42CE233c6E55");
   const vault = m.contract("Vault", [], {
     libraries: { Crypto: crypto },
   });
@@ -26,20 +27,9 @@ const proxyModule = buildModule("ProxyModule", (m) => {
 
   const proxy = m.contract("TransparentUpgradeableProxy", [
     vault,
-    proxyAdminOwner,
+    proxyAdmin,
     initializeData,
   ]);
-
-  // We need to get the address of the ProxyAdmin contract that was created by the TransparentUpgradeableProxy
-  // so that we can use it to upgrade the proxy later.
-  const proxyAdminAddress = m.readEventArgument(
-    proxy,
-    "AdminChanged",
-    "newAdmin"
-  );
-
-  // Here we use m.contractAt(...) to create a contract instance for the ProxyAdmin that we can interact with later to upgrade the proxy.
-  const proxyAdmin = m.contractAt("ProxyAdmin", proxyAdminAddress);
 
   // Return the proxy and proxy admin so that they can be used by other modules.
   return { proxyAdmin, proxy };

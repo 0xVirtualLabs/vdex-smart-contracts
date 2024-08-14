@@ -186,41 +186,6 @@ contract Vault is
         emit Deposited(msg.sender, token, amount);
     }
 
-    function withdraw(
-        WithdrawParams memory withdrawParams,
-        bytes calldata signature
-    ) external nonReentrant whenNotPaused {
-        require(withdrawParams.amount > 0, "Amount must be greater than zero");
-        require(withdrawParams.trader == msg.sender, "Caller not correct");
-        require(isTokenSupported(withdrawParams.token), "Token not supported");
-
-        require(
-            block.timestamp - withdrawParams.timestamp < signatureExpiryTime,
-            "Signature Expired"
-        );
-
-        bytes32 _digest = keccak256(
-            abi.encode(
-                withdrawParams.trader,
-                withdrawParams.token,
-                withdrawParams.amount,
-                withdrawParams.timestamp
-            )
-        );
-
-        Crypto._verifySignature(_digest, signature, _trustedSigner);
-
-        require(
-            IERC20(withdrawParams.token).transfer(
-                msg.sender,
-                withdrawParams.amount
-            ),
-            "Transfer failed"
-        );
-
-        emit Withdrawn(msg.sender, withdrawParams.token, withdrawParams.amount);
-    }
-
     function withdrawSchnorr(
         address _combinedPublicKey,
         Crypto.SchnorrSignature calldata _schnorr
