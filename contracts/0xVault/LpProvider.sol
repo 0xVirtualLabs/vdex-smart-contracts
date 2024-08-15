@@ -18,42 +18,68 @@ import {IOracle} from "./interfaces/IOracle.sol";
  */
 contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     // Constants
-    uint256 public constant ONE = 10**18; // Used for precision in calculations
+    uint256 public constant NAV_DECIMALS = 18; // Used for precision in calculations
 
     // State variables
-    address public vault;             // Address of the associated vault contract
-    address public coldWallet;        // Address of the cold wallet for fund storage
-    address public oracle;            // Address of the price oracle contract
+    address public vault; // Address of the associated vault contract
+    address public coldWallet; // Address of the cold wallet for fund storage
+    address public oracle; // Address of the price oracle contract
     uint256 public startEpochTimestamp; // Timestamp of the start of the epoch
-    uint256 public epochPeriod;       // Duration of each epoch
+    uint256 public epochPeriod; // Duration of each epoch
     uint256 public withdrawalDelayTime; // Delay time for withdrawals
 
     // Mappings
-    mapping(address => bool) public isLPProvider;     // Tracks whether an address is an LP provider
+    mapping(address => bool) public isLPProvider; // Tracks whether an address is an LP provider
     mapping(address => uint256) public lpProvidedAmount; // Amount of liquidity provided by each LP provider
-    mapping(address => uint256) public fundAmount;    // Total token amount for each token
-    mapping(address => uint256) public totalNAVs;     // Total NAVs for each token (10^18 decimals)
+    mapping(address => uint256) public fundAmount; // Total token amount for each token
+    mapping(address => uint256) public totalNAVs; // Total NAVs for each token (10^18 decimals)
     mapping(address => mapping(address => uint256)) public userNAVs; // NAVs for each user and token (10^18 decimals)
-    mapping(address => uint256) public navPrices;     // NAV price in USD for each token (10^18 decimals)
+    mapping(address => uint256) public navPrices; // NAV price in USD for each token (10^18 decimals)
     mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // Withdrawal requests for each user and token
 
     // Structs
     struct ReqWithdraw {
-        uint256 navAmount;  // Amount of NAVs requested for withdrawal
-        uint256 timestamp;  // Timestamp when the withdrawal can be executed
+        uint256 navAmount; // Amount of NAVs requested for withdrawal
+        uint256 timestamp; // Timestamp when the withdrawal can be executed
     }
 
     // Events
-    event LPProvided(address indexed user, address indexed token, uint256 amount);
-    event LPWithdrawn(address indexed user, address indexed token, uint256 amount);
-    event DepositFund(address indexed user, address indexed token, uint256 amount, uint256 fundAmount);
-    event WithdrawFund(address indexed user, address indexed token, uint256 amount, uint256 fundAmount);
-    event WithdrawRequested(address indexed user, address indexed token, uint256 navAmount, uint256 timestamp);
+    event LPProvided(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
+    event LPWithdrawn(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
+    event DepositFund(
+        address indexed user,
+        address indexed token,
+        uint256 amount,
+        uint256 fundAmount
+    );
+    event WithdrawFund(
+        address indexed user,
+        address indexed token,
+        uint256 amount,
+        uint256 fundAmount
+    );
+    event WithdrawRequested(
+        address indexed user,
+        address indexed token,
+        uint256 navAmount,
+        uint256 timestamp
+    );
     event LPProviderStatusChanged(address indexed lpProvider, bool isProvider);
     event VaultChanged(address indexed newVault);
     event ColdWalletChanged(address indexed newColdWallet);
     event OracleChanged(address indexed newOracle);
-    event EpochParametersChanged(uint256 newStartEpochTimestamp, uint256 newEpochPeriod);
+    event EpochParametersChanged(
+        uint256 newStartEpochTimestamp,
+        uint256 newEpochPeriod
+    );
     event WithdrawalDelayTimeChanged(uint256 newWithdrawalDelayTime);
     event RewardDepositedForMarketMaker(address indexed token, uint256 amount);
     event NAVPriceUpdated(address indexed token, uint256 newPrice);
@@ -99,12 +125,45 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param amount The amount of tokens
      * @return The calculated NAV amount
      */
-    function _calcNAVAmount(address token, uint256 amount) private view returns (uint256) {
-        if (totalNAVs[token] == 0) {
-            return amount * IOracle(oracle).getPrice(token) * ONE / navPrices[token];
-        }
+    function _calcNAVAmount(
+        address token,
+        uint256 amount
+    ) private view returns (uint256) {
+        uint256 priceDecimals = IOracle(oracle).decimals();
         uint256 usdAmount = amount * IOracle(oracle).getPrice(token);
-        return (usdAmount * ONE / navPrices[token]);
+        if (NAV_DECIMALS >= priceDecimals) {
+            return
+                (usdAmount * (10 ** (NAV_DECIMALS - priceDecimals))) /
+                navPrices[token];
+        } else {
+            return
+                (usdAmount / (10 ** (priceDecimals - NAV_DECIMALS))) /
+                navPrices[token];
+        }
+    }
+
+    /**
+     * @dev Calculates the token amount based on the NAV amount
+     * @param token The address of the token
+     * @param navAmount The navAmount of tokens
+     * @return The calculated amount
+     */
+    function _calcAmountFromNAV(
+        address token,
+        uint256 navAmount
+    ) private view returns (uint256) {
+        uint256 priceDecimals = IOracle(oracle).decimals();
+        if (NAV_DECIMALS >= priceDecimals) {
+            return
+                ((navAmount * navPrices[token]) /
+                    (10 ** (NAV_DECIMALS - priceDecimals))) /
+                IOracle(oracle).getPrice(token);
+        } else {
+            return
+                ((navAmount * navPrices[token]) *
+                    (10 ** (priceDecimals - NAV_DECIMALS))) /
+                IOracle(oracle).getPrice(token);
+        }
     }
 
     /**
@@ -121,7 +180,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "Transfer failed"
         );
         if (navPrices[token] == 0) {
-            navPrices[token] = 1 * ONE; // Set initial NAV price to 1 for first time
+            navPrices[token] = 1 * (10 ** NAV_DECIMALS); // Set initial NAV price to 1 for first time
         }
 
         uint256 navs = _calcNAVAmount(token, amount);
@@ -140,9 +199,9 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         require(navsAmount > 0, "Amount must be greater than zero");
         require(userNAVs[token][msg.sender] >= navsAmount, "Insufficient fund");
 
+        uint256 tokenAmount = _calcAmountFromNAV(token, navsAmount);
         userNAVs[token][msg.sender] -= navsAmount;
         totalNAVs[token] -= navsAmount;
-        uint256 tokenAmount = navsAmount * fundAmount[token] / totalNAVs[token];
         fundAmount[token] -= tokenAmount;
 
         require(
@@ -170,12 +229,23 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param token The address of the token to withdraw
      * @param navsAmount The amount of NAVs to withdraw
      */
-    function requestWithdrawFund(address token, uint256 navsAmount) external nonReentrant {
+    function requestWithdrawFund(
+        address token,
+        uint256 navsAmount
+    ) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
         require(userNAVs[token][msg.sender] >= navsAmount, "Insufficient fund");
         uint256 withdrawTimestamp = block.timestamp + withdrawalDelayTime;
-        reqWithdraws[token][msg.sender] = ReqWithdraw(navsAmount, withdrawTimestamp);
-        emit WithdrawRequested(msg.sender, token, navsAmount, withdrawTimestamp);
+        reqWithdraws[token][msg.sender] = ReqWithdraw(
+            navsAmount,
+            withdrawTimestamp
+        );
+        emit WithdrawRequested(
+            msg.sender,
+            token,
+            navsAmount,
+            withdrawTimestamp
+        );
     }
 
     /**
@@ -185,7 +255,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     function withdrawFund(address token) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
         ReqWithdraw memory reqWithdraw = reqWithdraws[token][msg.sender];
-        require(block.timestamp >= reqWithdraw.timestamp, "Withdrawal delay not met");
+        require(
+            block.timestamp >= reqWithdraw.timestamp,
+            "Withdrawal delay not met"
+        );
         _withdrawFund(token, reqWithdraw.navAmount);
         delete reqWithdraws[token][msg.sender];
     }
@@ -195,7 +268,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param token The address of the token to provide liquidity for
      * @param amount The amount of tokens to provide as liquidity
      */
-    function provideLiquidity(address token, uint256 amount) external nonReentrant {
+    function provideLiquidity(
+        address token,
+        uint256 amount
+    ) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
         require(amount > 0, "Amount must be greater than zero");
         require(IVault(vault).isTokenSupported(token), "Token not supported");
@@ -218,10 +294,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         require(IVault(vault).isTokenSupported(token), "Token not supported");
         uint256 amount = lpProvidedAmount[token];
         require(amount > 0, "No liquidity to withdraw");
-        require(
-            IERC20(token).transfer(msg.sender, amount),
-            "Transfer failed"
-        );
+        require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
 
         lpProvidedAmount[token] = 0;
 
@@ -235,7 +308,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param token The address of the token
      * @param amount The amount to increase
      */
-    function increaseLpProvidedAmount(address token, uint256 amount) external onlyVault {
+    function increaseLpProvidedAmount(
+        address token,
+        uint256 amount
+    ) external onlyVault {
         lpProvidedAmount[token] += amount;
         emit LPProvided(address(this), token, amount);
     }
@@ -245,12 +321,12 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param token The address of the token
      * @param amount The amount to decrease
      */
-    function decreaseLpProvidedAmount(address token, uint256 amount) external onlyVault {
+    function decreaseLpProvidedAmount(
+        address token,
+        uint256 amount
+    ) external onlyVault {
         require(lpProvidedAmount[token] >= amount, "Insufficient LP amount");
-        require(
-            IERC20(token).transfer(vault, amount),
-            "Transfer failed"
-        );
+        require(IERC20(token).transfer(vault, amount), "Transfer failed");
         lpProvidedAmount[token] -= amount;
         emit LPWithdrawn(address(this), token, amount);
     }
@@ -262,14 +338,16 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param lpProvider Array of LP provider addresses
      * @param isProvider Array of boolean values indicating LP provider status
      */
-    function setLPProvider(address[] calldata lpProvider, bool[] calldata isProvider) external onlyOwner {
+    function setLPProvider(
+        address[] calldata lpProvider,
+        bool[] calldata isProvider
+    ) external onlyOwner {
         require(lpProvider.length == isProvider.length, "Invalid input");
         for (uint256 i = 0; i < lpProvider.length; i++) {
             isLPProvider[lpProvider[i]] = isProvider[i];
             emit LPProviderStatusChanged(lpProvider[i], isProvider[i]);
         }
     }
-
 
     /**
      * @dev Updates the NAV price for a token
@@ -287,7 +365,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param tokens Array of token addresses
      * @param prices Array of NAV prices
      */
-    function setNAVPrices(address[] calldata tokens, uint256[] calldata prices) external onlyOwner {
+    function setNAVPrices(
+        address[] calldata tokens,
+        uint256[] calldata prices
+    ) external onlyOwner {
         require(tokens.length == prices.length, "Invalid input");
         for (uint256 i = 0; i < tokens.length; i++) {
             navPrices[tokens[i]] = prices[i];
@@ -330,7 +411,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param _startEpochTimestamp The new start epoch timestamp
      * @param _epochPeriod The new epoch period
      */
-    function setEpochParameters(uint256 _startEpochTimestamp, uint256 _epochPeriod) external onlyOwner {
+    function setEpochParameters(
+        uint256 _startEpochTimestamp,
+        uint256 _epochPeriod
+    ) external onlyOwner {
         startEpochTimestamp = _startEpochTimestamp;
         epochPeriod = _epochPeriod;
         emit EpochParametersChanged(_startEpochTimestamp, _epochPeriod);
@@ -340,7 +424,9 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @dev Sets the withdrawal delay time
      * @param _withdrawalDelayTime The new withdrawal delay time
      */
-    function setWithdrawalDelayTime(uint256 _withdrawalDelayTime) external onlyOwner {
+    function setWithdrawalDelayTime(
+        uint256 _withdrawalDelayTime
+    ) external onlyOwner {
         withdrawalDelayTime = _withdrawalDelayTime;
         emit WithdrawalDelayTimeChanged(_withdrawalDelayTime);
     }
@@ -350,7 +436,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param token The address of the token to deposit
      * @param amount The amount of tokens to deposit
      */
-    function depositRewardForMarketMaker(address token, uint256 amount) external onlyOwner {
+    function depositRewardForMarketMaker(
+        address token,
+        uint256 amount
+    ) external onlyOwner {
         require(amount > 0, "Amount must be greater than zero");
         require(IVault(vault).isTokenSupported(token), "Token not supported");
 
