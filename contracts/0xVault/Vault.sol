@@ -7,8 +7,10 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IOracle} from "./interfaces/IOracle.sol";
+import {ISupraVerifier} from "./interfaces/ISupraVerifier.sol";
 import {ILpProvider} from "./interfaces/ILpProvider.sol";
 import {Crypto} from "./libs/Crypto.sol";
+import {SupraOracleDecoder} from "./libs/SupraOracleDecoder.sol";
 
 /**
  * @custom:oz-upgrades-from Vault
@@ -33,8 +35,9 @@ contract Vault is
     mapping(address => address) public combinedPublicKey;
     address private _trustedSigner;
     address[] private supportedTokens;
-    address public oracle;
     uint256 constant ONE = 1e9;
+    address public supraStorageOracle;
+    address public supraVerifier;
     // for adding LP
     mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
     address public lpProvider;
@@ -86,6 +89,7 @@ contract Vault is
     error InvalidAddress();
     error DisputeChallengeFailed();
     error SettleDisputeFailed();
+    error DataNotVerified();
 
     struct WithdrawParams {
         address trader;
@@ -137,13 +141,17 @@ contract Vault is
         address _owner,
         address trustedSigner,
         uint256 _signatureExpiryTime,
-        address _lpProvider
+        address _lpProvider,
+        address _supraStorageOracle,
+        address _supraVerifier
     ) public initializer {
         OwnableUpgradeable.__Ownable_init(_owner);
         __Pausable_init();
         _trustedSigner = trustedSigner;
         signatureExpiryTime = _signatureExpiryTime;
         lpProvider = _lpProvider;
+        supraStorageOracle = _supraStorageOracle;
+        supraVerifier = _supraVerifier;
     }
 
     function deposit(
@@ -235,9 +243,9 @@ contract Vault is
         emit Withdrawn(msg.sender, schnorrData.token, schnorrData.amount);
     }
 
-    function setOracle(address newOracle) external onlyOwner {
-        oracle = newOracle;
-    }
+    // function setOracle(address newOracle) external onlyOwner {
+    //     oracle = newOracle;
+    // }
 
     function addToken(address token) external onlyOwner {
         supportedTokens.push(token);
@@ -440,6 +448,10 @@ contract Vault is
                 newPosition.collaterals.push(
                     Crypto.Collateral({
                         token: schnorrData.positions[i].collaterals[j].token,
+                        oracleId: schnorrData
+                            .positions[i]
+                            .collaterals[j]
+                            .oracleId,
                         quantity: schnorrData
                             .positions[i]
                             .collaterals[j]
@@ -529,6 +541,10 @@ contract Vault is
                 for (uint256 j = 0; j < colLen; j++) {
                     newPosition.collaterals.push(
                         Crypto.Collateral({
+                            oracleId: schnorrData
+                                .positions[i]
+                                .collaterals[j]
+                                .oracleId,
                             token: schnorrData
                                 .positions[i]
                                 .collaterals[j]
@@ -550,6 +566,104 @@ contract Vault is
         } else {
             revert DisputeChallengeFailed();
         }
+    }
+
+    function challengeLiquidatedPosition(
+        uint32 requestId,
+        bytes[] calldata bytesProofs, // different timestamp, different bytesProof
+        string[] memory positionIds, // positionIds and priceIndexs for mapping liquidated position with oracle price at the liquidated timestamp
+        string[] memory priceIndexs
+    ) external nonReentrant whenNotPaused {
+        uint256 liquidatedLen = positionIds.length;
+        require(liquidatedLen == priceIndexs.length, "Invalid input");
+
+        Dispute storage dispute = _disputes[requestId];
+        require(
+            dispute.status == uint8(DisputeStatus.Opened),
+            "Invalid dispute status"
+        );
+        require(
+            block.timestamp < dispute.timestamp + 1800, // fake 30m
+            "Dispute window closed"
+        );
+
+        uint256 proofLen = bytesProofs.length;
+        uint256 paircnt = 0;
+        for (uint256 i = 0; i < proofLen; i++) {
+            SupraOracleDecoder.OracleProofV2 memory oracle = SupraOracleDecoder
+                .decodeOracleProof(bytesProofs[i]);
+            // verify oracle proof
+            uint256 orcLen = oracle.data.length;
+            for (uint256 j = 0; j < orcLen; j++) {
+                requireRootVerified(
+                    oracle.data[j].root,
+                    oracle.data[j].sigs,
+                    oracle.data[j].committee_id
+                );
+                paircnt += oracle.data[j].committee_data.committee_feeds.length;
+            }
+        }
+
+        SupraOracleDecoder.CommitteeFeed[]
+            memory allFeeds = new SupraOracleDecoder.CommitteeFeed[](paircnt);
+        uint256 feedIndex = 0;
+        for (uint256 i = 0; i < proofLen; i++) {
+            SupraOracleDecoder.OracleProofV2 memory oracle = SupraOracleDecoder
+                .decodeOracleProof(bytesProofs[i]);
+            uint256 orcLen = oracle.data.length;
+            for (uint256 j = 0; j < orcLen; j++) {
+                SupraOracleDecoder.CommitteeFeed[] memory feeds = oracle
+                    .data[j]
+                    .committee_data
+                    .committee_feeds;
+                for (uint256 k = 0; k < feeds.length; k++) {
+                    allFeeds[feedIndex] = feeds[k];
+                    feedIndex++;
+                }
+            }
+        }
+
+        // we have feeds, we have positionIds, we have priceIndexs (positionIds and priceIndexs are mapping)
+        // => loop all position, get feeds price from priceIndexs, remove liquidated positions
+        for (uint i = 0; i < dispute.positions.length; i++) {
+            for (uint j = 0; j < liquidatedLen; j++) {
+                if (
+                    keccak256(bytes(dispute.positions[i].positionId)) !=
+                    keccak256(bytes(positionIds[j]))
+                ) {
+                    continue;
+                }
+                // TODO: change the logic to remove liquidated position here
+                uint256 priceIndex = uint256(keccak256(bytes(priceIndexs[j])));
+                uint256 price = allFeeds[priceIndex].price;
+                if (dispute.positions[i].isLong) {
+                    if (
+                        _isPositionLiquidated(dispute.positions[i], price, true)
+                    ) {
+                        dispute.positions[i].quantity = 0;
+                    }
+                } else {
+                    if (
+                        _isPositionLiquidated(
+                            dispute.positions[i],
+                            price,
+                            false
+                        )
+                    ) {
+                        dispute.positions[i].quantity = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    function _isPositionLiquidated(
+        Crypto.Position memory position,
+        uint256 price,
+        bool isLong
+    ) internal pure returns (bool) {
+        // TODO: update this code
+        return true;
     }
 
     function settleDispute(
@@ -673,5 +787,21 @@ contract Vault is
         address _combinedPublicKey
     ) external onlyOwner {
         combinedPublicKey[_user] = _combinedPublicKey;
+    }
+
+    function requireRootVerified(
+        bytes32 root,
+        uint256[2] memory sigs,
+        uint256 committee_id
+    ) private view {
+        (bool status, ) = address(supraVerifier).staticcall(
+            abi.encodeCall(
+                ISupraVerifier.requireHashVerified_V2,
+                (root, sigs, committee_id)
+            )
+        );
+        if (!status) {
+            revert DataNotVerified();
+        }
     }
 }

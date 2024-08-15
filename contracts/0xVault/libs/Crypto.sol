@@ -58,6 +58,7 @@ library Crypto {
     }
 
     struct Collateral {
+        uint256 oracleId;
         address token;
         uint256 quantity;
         uint256 entryPrice;
