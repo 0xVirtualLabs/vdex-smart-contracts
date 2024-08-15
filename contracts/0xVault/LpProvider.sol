@@ -27,6 +27,20 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public startEpochTimestamp; // Timestamp of the start of the epoch
     uint256 public epochPeriod; // Duration of each epoch
     uint256 public withdrawalDelayTime; // Delay time for withdrawals
+    uint256 public navPrice; // Number of epochs
+
+    uint256 public totalNAV; // Total NAVs for all tokens (10^18 decimals)
+    
+    struct Epoch {
+        uint256 startTimestamp; // Start timestamp of the epoch
+        uint256 initialNavQuantity; // Initial NAV quantity at the start of the epoch
+        uint256 navInitialPrice; // NAV price at the start of the epoch
+        mapping(address => uint256) tokensDeposited; // NAV quantity for each token
+        mapping(address => uint256) withdrawRequested; // NAV quantity withdrawn for each token
+    }
+
+    uint265 public currentEpoch; // Current epoch number
+    mapping(uint256 => Epoch) public epochs; // Mapping of epoch number to epoch data
 
     // Mappings
     mapping(address => bool) public isLPProvider; // Tracks whether an address is an LP provider
@@ -35,6 +49,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     mapping(address => uint256) public totalNAVs; // Total NAVs for each token (10^18 decimals)
     mapping(address => mapping(address => uint256)) public userNAVs; // NAVs for each user and token (10^18 decimals)
     mapping(address => uint256) public navPrices; // NAV price in USD for each token (10^18 decimals)
+    //Why there is a separate nav price in USD for each token. There should be only one nav price in USD for all tokens.?
     mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // Withdrawal requests for each user and token
 
     // Structs
