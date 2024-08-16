@@ -42,6 +42,9 @@ contract Vault is
     mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
     address public lpProvider;
 
+    uint256 public constant MAINTENANCE_MARGIN_PERCENT = 50;
+    uint256 public constant BACKSTOP_LIQUIDATION_PERCENT = 6667;
+
     struct TokenBalance {
         address token;
         uint256 balance;
@@ -467,6 +470,11 @@ contract Vault is
         // we have feeds, we have positionIds, we have priceIndexs (positionIds and priceIndexs are mapping)
         // => loop all position, get feeds price from priceIndexs, remove liquidated positions
         for (uint i = 0; i < dispute.positions.length; i++) {
+            // no leverage
+            if (dispute.positions[i].leverageFactor == 1) {
+                continue;
+            }
+            
             for (uint j = 0; j < liquidatedLen; j++) {
                 if (
                     keccak256(bytes(dispute.positions[i].positionId)) !=
@@ -474,28 +482,115 @@ contract Vault is
                 ) {
                     continue;
                 }
-                // TODO: change the logic to remove liquidated position here
-                uint256 priceIndex = uint256(keccak256(bytes(priceIndexs[j])));
-                uint256 price = allFeeds[priceIndex].price;
-                if (dispute.positions[i].isLong) {
-                    if (
-                        _isPositionLiquidated(dispute.positions[i], price, true)
-                    ) {
-                        dispute.positions[i].quantity = 0;
-                    }
-                } else {
-                    if (
-                        _isPositionLiquidated(
-                            dispute.positions[i],
-                            price,
-                            false
-                        )
-                    ) {
-                        dispute.positions[i].quantity = 0;
+                if (
+                    _checkLiquidatedPosition(dispute.positions[i], allFeeds, dispute.balances)
+                ) {
+                    dispute.positions[i].quantity = 0;
+                    if (keccak256(abi.encodePacked(position.leverageType)) == keccak256(abi.encodePacked("cross"))) {
+                        // update user balance if cross position is liquidated
+                        for (uint256 k = 0; k < dispute.balances.length; k++) {
+                            dispute.balances[k].balance = 0;
+                        }
                     }
                 }
+                // // TODO: change the logic to remove liquidated position here
+                // uint256 priceIndex = uint256(keccak256(bytes(priceIndexs[j])));
+                // uint256 price = allFeeds[priceIndex].price;
+                // if (dispute.positions[i].isLong) {
+                //     if (
+                //         _isPositionLiquidated(dispute.positions[i], price, true)
+                //     ) {
+                //         dispute.positions[i].quantity = 0;
+                //     }
+                // } else {
+                //     if (
+                //         _isPositionLiquidated(
+                //             dispute.positions[i],
+                //             price,
+                //             false
+                //         )
+                //     ) {
+                //         dispute.positions[i].quantity = 0;
+                //     }
+                // }
             }
         }
+    }
+
+    function _getPriceByPairId(SupraOracleDecoder.CommitteeFeed[] memory allFeeds, uint32 pair)
+        internal
+        pure
+        returns (uint128)
+    {
+        for (uint256 i = 0; i < allFeeds.length; i++) {
+            if (allFeeds[i].pair == pair) {
+                return allFeeds[i].price;
+            }
+        }
+        
+        revert("given pair not found");
+    }
+
+    function _getPositionLoss(
+        Crypto.Position memory position,
+        SupraOracleDecoder.CommitteeFeed[] memory allFeeds
+    ) internal pure returns (uint256) {
+        uint256 totalPositionValue = position.quantity * _getPriceByPairId(allFeeds, position.oracleId);
+        uint256 positionInitialValue = position.quantity * position.entryPrice;
+
+        if (position.isLong) {
+            if (totalPositionValue > positionInitialValue) {
+                return 0;
+            }
+            return positionInitialValue - totalPositionValue;
+        } else {
+            if (totalPositionValue < positionInitialValue) {
+                return 0;
+            }
+            return totalPositionValue - positionInitialValue;
+        }
+    }
+
+    function _checkLiquidatedPosition(
+        Crypto.Position memory position,
+        SupraOracleDecoder.CommitteeFeed[] memory allFeeds,
+        Crypto.Balance[] memory balances
+    ) internal pure returns (bool) {
+        uint256 totalPositionLoss = 0;
+        uint256 totalPositionInitialCollateral = 0;
+
+        // position loss
+        totalPositionLoss += _getPositionLoss(position, allFeeds);
+
+        uint256 collateralCurrentValue = 0;
+        for (uint256 j = 0; j < position.collaterals.length; j++) {
+            collateralCurrentValue += position.collaterals[j].quantity * _getPriceByPairId(allFeeds, position.collaterals[j].oracleId);
+            totalPositionInitialCollateral += position.collaterals[j].entryPrice * position.collaterals[j].quantity;
+        }
+
+        totalPositionLoss += totalPositionInitialCollateral - collateralCurrentValue;
+
+        // cross position
+        if (keccak256(abi.encodePacked(position.leverageType)) == keccak256(abi.encodePacked("cross"))) {
+            for (uint256 i = 0; i < balances.length; i++) {
+                totalPositionInitialCollateral += balances[i].balance * _getPriceByPairId(allFeeds, balances[i].oracleId);
+            }
+        }
+
+        uint256 liquidationLevel = totalPositionInitialCollateral * MAINTENANCE_MARGIN_PERCENT / 100;
+        uint256 backstopLiquidationLevel = totalPositionInitialCollateral * BACKSTOP_LIQUIDATION_PERCENT / 10000;
+
+        // check backstop liquidation
+        if (totalPositionLoss > backstopLiquidationLevel) {
+            return true;
+        }
+
+        // check liquidation
+        if (totalPositionLoss > liquidationLevel) {
+            return true;
+        }
+
+        return false;
     }
 
     function _isPositionLiquidated(
