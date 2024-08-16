@@ -70,6 +70,11 @@ library Crypto {
         bytes proofBytes;
     }
 
+    struct UpdateDispute {
+        uint32 disputeId;
+        
+    }
+
     struct Position {
         string positionId;
         uint256 oracleId;
@@ -125,15 +130,13 @@ library Crypto {
         uint32 sessionId;
     }
 
-    /**
-     * @dev Decodes bytes into Schnorr data.
-     *
-     * @param _data (bytes) The encoded Schnorr data.
-     * @return (SchnorrData) The decoded Schnorr data.
-     */
     function decodeSchnorrData(
-        bytes memory _data
+        Crypto.SchnorrSignature calldata _schnorr,
+        address combinedPublicKey
     ) external pure returns (SchnorrData memory) {
+        if (!_verifySchnorrSignature(_schnorr, combinedPublicKey)) {
+            revert InvalidSchnorrSignature();
+        }
         (
             uint32 signatureId,
             address addr,
@@ -141,21 +144,30 @@ library Crypto {
             Position[] memory positions,
             string memory sigType,
             uint256 timestamp
-        ) = abi.decode(_data, (uint32, address, Balance[], Position[], string, uint256));
-        return SchnorrData(signatureId, addr, balances, positions, sigType, timestamp);
+        ) = abi.decode(
+                _schnorr.data,
+                (uint32, address, Balance[], Position[], string, uint256)
+            );
+        return
+            SchnorrData(
+                signatureId,
+                addr,
+                balances,
+                positions,
+                sigType,
+                timestamp
+            );
     }
 
-    /**
-     * @dev Decodes bytes into Schnorr data.
-     *
-     * @param _data (bytes) The encoded Schnorr data.
-     * @return (SchnorrData) The decoded Schnorr data.
-     */
     function decodeSchnorrDataWithdraw(
-        bytes memory _data
+        Crypto.SchnorrSignature calldata _schnorr,
+        address combinedPublicKey
     ) external pure returns (SchnorrDataWithdraw memory) {
+        if (!_verifySchnorrSignature(_schnorr, combinedPublicKey)) {
+            revert InvalidSchnorrSignature();
+        }
         (address trader, address token, uint256 amount, uint64 timestamp) = abi
-            .decode(_data, (address, address, uint256, uint64));
+            .decode(_schnorr.data, (address, address, uint256, uint64));
         return SchnorrDataWithdraw(trader, token, amount, timestamp);
     }
 
@@ -169,7 +181,7 @@ library Crypto {
         bytes32 _digest,
         bytes calldata _signature,
         address _trustedSigner
-    ) pure external {
+    ) external pure {
         // if (_signatureUsed[_signature]) {
         //     revert InvalidUsedSignature();
         // }
@@ -210,7 +222,7 @@ library Crypto {
     function _verifySchnorrSignature(
         SchnorrSignature memory _schnorr,
         address _combinedPublicKey
-    ) external pure returns (bool) {
+    ) public pure returns (bool) {
         // if (_schnorrSignatureUsed[_schnorr.signature]) {
         //     revert InvalidSchnorrSignature();
         // }

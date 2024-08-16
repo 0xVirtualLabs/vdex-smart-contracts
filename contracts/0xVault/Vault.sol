@@ -34,7 +34,6 @@ contract Vault is
     mapping(uint32 => uint32) private _latestSchnorrSignatureId;
 
     mapping(address => address) public combinedPublicKey;
-    address private _trustedSigner;
     address[] private supportedTokens;
     uint256 constant ONE = 1e9;
     address public supraStorageOracle;
@@ -42,9 +41,7 @@ contract Vault is
     // for adding LP
     mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
     address public lpProvider;
-
-    uint256 public constant MAINTENANCE_MARGIN_PERCENT = 50;
-    uint256 public constant BACKSTOP_LIQUIDATION_PERCENT = 6667;
+    address public dexSupporter;
 
     struct TokenBalance {
         address token;
@@ -60,10 +57,6 @@ contract Vault is
         address indexed user,
         address indexed token,
         uint256 amount
-    );
-    event TrustedSignerChanged(
-        address indexed prevSigner,
-        address indexed newSigner
     );
     event WithdrawalRequested(
         address indexed user,
@@ -142,19 +135,19 @@ contract Vault is
 
     function initialize(
         address _owner,
-        address trustedSigner,
         uint256 _signatureExpiryTime,
         address _lpProvider,
+        address _dexSupporter,
         address _supraStorageOracle,
         address _supraVerifier
     ) public initializer {
         OwnableUpgradeable.__Ownable_init(_owner);
         __Pausable_init();
-        _trustedSigner = trustedSigner;
         signatureExpiryTime = _signatureExpiryTime;
         lpProvider = _lpProvider;
         supraStorageOracle = _supraStorageOracle;
         supraVerifier = _supraVerifier;
+        dexSupporter = _dexSupporter;
     }
 
     function deposit(
@@ -177,17 +170,8 @@ contract Vault is
         address _combinedPublicKey,
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
-        if (
-            !Crypto._verifySchnorrSignature(
-                _schnorr,
-                combinedPublicKey[msg.sender]
-            )
-        ) {
-            revert InvalidSchnorrSignature();
-        }
-
         Crypto.SchnorrDataWithdraw memory schnorrData = Crypto
-            .decodeSchnorrDataWithdraw(_schnorr.data);
+            .decodeSchnorrDataWithdraw(_schnorr, combinedPublicKey[msg.sender]);
 
         require(schnorrData.amount > 0, "Amount must byese greater than zero");
         require(isTokenSupported(schnorrData.token), "Token not supported");
@@ -247,17 +231,9 @@ contract Vault is
     function withdrawAndClosePositionTrustlessly(
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
-        if (
-            !Crypto._verifySchnorrSignature(
-                _schnorr,
-                combinedPublicKey[msg.sender]
-            )
-        ) {
-            revert InvalidSchnorrSignature();
-        }
-
         Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
-            _schnorr.data
+            _schnorr,
+            combinedPublicKey[msg.sender]
         );
 
         if (schnorrData.addr != msg.sender) {
@@ -333,9 +309,9 @@ contract Vault is
     ) external nonReentrant whenNotPaused {
         Dispute storage dispute = _disputes[requestId];
         Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
-            _schnorr.data
+            _schnorr,
+            combinedPublicKey[msg.sender]
         );
-
         require(
             dispute.status == uint8(DisputeStatus.Opened),
             "Invalid dispute status"
@@ -412,135 +388,53 @@ contract Vault is
         }
     }
 
-    function challengeLiquidatedPosition(
-        uint32 requestId,
-        // bytes[] calldata bytesProofs, // different timestamp, different bytesProof
-        Crypto.LiquidatedPosition[] memory positions // positionIds and priceIndexs for mapping liquidated position with oracle price at the liquidated timestamp
-    )
-        external
-        // string[] memory priceIndexs
-        nonReentrant
-        whenNotPaused
-    {
-        uint256 liquidatedLen = positions.length;
-
+    function getDisputeStatus(uint32 requestId) external view returns (bool isOpenDispute, uint64 timestamp, address user) {
         Dispute storage dispute = _disputes[requestId];
-        require(
-            dispute.status == uint8(DisputeStatus.Opened),
-            "Invalid dispute status"
-        );
-        require(
-            block.timestamp < dispute.timestamp + 1800, // fake 30m
-            "Dispute window closed"
-        );
+        isOpenDispute = dispute.status == uint8(DisputeStatus.Opened);
+        timestamp = dispute.timestamp;
+        user = dispute.user;
+    }
 
-        // uint256 proofLen = bytesProofs.length;
-        // uint256 paircnt = 0;
-        for (uint256 i = 0; i < liquidatedLen; i++) {
-            SupraOracleDecoder.OracleProofV2 memory oracle = SupraOracleDecoder
-                .decodeOracleProof(positions[i].proofBytes);
-            // verify oracle proof
-            uint256 orcLen = oracle.data.length;
-            for (uint256 j = 0; j < orcLen; j++) {
-                requireRootVerified(
-                    oracle.data[j].root,
-                    oracle.data[j].sigs,
-                    oracle.data[j].committee_id
-                );
-                // paircnt += oracle.data[j].committee_data.committee_feeds.length;
-            }
+    function getDisputePositions(uint32 requestId) external view returns (Crypto.Position[] memory) {
+        return _disputes[requestId].positions;
+    }
+
+    function getDisputeBalances(uint32 requestId) external view returns (Crypto.Balance[] memory) {
+        return _disputes[requestId].balances;
+    }
+
+    function updateLiquidatedPositions(
+        uint32 requestId,
+        uint256[] memory liquidatedIndexes,
+        uint256 liquidatedCount,
+        bool isCrossLiquidated
+    ) external {
+        require(msg.sender == dexSupporter, "Require Dex Supporter");
+        
+        Dispute storage dispute = _disputes[requestId];
+        require(dispute.status == uint8(DisputeStatus.Opened), "Invalid dispute status");
+
+        // Update liquidated positions
+        for (uint256 i = 0; i < liquidatedCount; i++) {
+            uint256 index = liquidatedIndexes[i];
+            dispute.positions[index].quantity = 0;
         }
 
-        // SupraOracleDecoder.CommitteeFeed[]
-        //     memory allFeeds = new SupraOracleDecoder.CommitteeFeed[](paircnt);
-        // uint256 feedIndex = 0;
-        // for (uint256 i = 0; i < proofLen; i++) {
-        //     SupraOracleDecoder.OracleProofV2 memory oracle = SupraOracleDecoder
-        //         .decodeOracleProof(positions[i].proofBytes);
-        //     uint256 orcLen = oracle.data.length;
-        //     for (uint256 j = 0; j < orcLen; j++) {
-        //         SupraOracleDecoder.CommitteeFeed[] memory feeds = oracle
-        //             .data[j]
-        //             .committee_data
-        //             .committee_feeds;
-        //         for (uint256 k = 0; k < feeds.length; k++) {
-        //             allFeeds[feedIndex] = feeds[k];
-        //             feedIndex++;
-        //         }
-        //     }
-        // }
-
-        // we have feeds, we have positionIds, we have priceIndexs (positionIds and priceIndexs are mapping)
-        // => loop all position, get feeds price from priceIndexs, remove liquidated positions
-        for (uint i = 0; i < dispute.positions.length; i++) {
-            // no leverage
-            if (dispute.positions[i].leverageFactor == 1) {
-                continue;
-            }
-
-            // loop over liquidated positions
-            for (uint j = 0; j < liquidatedLen; j++) {
-                if (
-                    keccak256(bytes(dispute.positions[i].positionId)) !=
-                    keccak256(bytes(positions[j].positionId))
-                ) {
-                    continue;
-                }
-
-                // get priceFeeds for position
-                SupraOracleDecoder.CommitteeFeed[] memory positionFeeds;
-                SupraOracleDecoder.OracleProofV2
-                    memory oracle = SupraOracleDecoder.decodeOracleProof(
-                        positions[j].proofBytes
-                    );
-                uint256 feedIndex = 0;
-                for (uint256 k = 0; k < oracle.data.length; k++) {
-                    SupraOracleDecoder.CommitteeFeed[] memory feeds = oracle
-                        .data[k]
-                        .committee_data
-                        .committee_feeds;
-                    for (uint256 t = 0; t < feeds.length; t++) {
-                        positionFeeds[feedIndex] = feeds[t];
-                        feedIndex++;
-                    }
-                }
-                if (
-                    Dex._checkLiquidatedPosition(
-                        dispute.positions[i],
-                        positionFeeds,
-                        dispute.balances
-                    )
-                ) {
-                    dispute.positions[i].quantity = 0;
-                    if (
-                        keccak256(
-                            abi.encodePacked(dispute.positions[i].leverageType)
-                        ) == keccak256(abi.encodePacked("cross"))
-                    ) {
-                        // update user balance if cross position is liquidated
-                        for (uint256 k = 0; k < dispute.balances.length; k++) {
-                            dispute.balances[k].balance = 0;
-                        }
-                    }
-                }
+        // If cross position is liquidated, update user balance
+        if (isCrossLiquidated) {
+            for (uint256 i = 0; i < dispute.balances.length; i++) {
+                dispute.balances[i].balance = 0;
             }
         }
     }
 
+
     function liquidatePartially(
         Crypto.SchnorrSignature calldata _schnorr
     ) external onlyOwner {
-        if (
-            !Crypto._verifySchnorrSignature(
-                _schnorr,
-                combinedPublicKey[msg.sender]
-            )
-        ) {
-            revert InvalidSchnorrSignature();
-        }
-
         Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(
-            _schnorr.data
+            _schnorr,
+            combinedPublicKey[msg.sender]
         );
 
         if (data.addr != msg.sender) {
@@ -601,107 +495,39 @@ contract Vault is
         }
     }
 
-    function settleDispute(
-        uint32 requestId
-    ) external nonReentrant whenNotPaused {
+    function settleDisputeResult(
+        uint32 requestId,
+        uint256[] memory updatedBalances,
+        uint256[] memory pnlValues,
+        bool[] memory isProfits
+    ) external nonReentrant {
+        require(msg.sender == dexSupporter, "Unauthorized");
+        
         Dispute storage dispute = _disputes[requestId];
-        require(
-            dispute.status == uint8(DisputeStatus.Challenged),
-            "Invalid dispute status"
-        );
-        require(
-            block.timestamp > dispute.timestamp + 1800, // fake 30m
-            "Dispute window closed"
-        );
+        require(dispute.status == uint8(DisputeStatus.Opened), "Invalid dispute status");
 
-        // TODO: wait oracle loop all positions, fetch oracle price, and return token amount after closing position
-        for (uint i = 0; i < dispute.positions.length; i++) {
-            if (dispute.positions[i].quantity == 0) {
-                continue;
-            }
-            IOracle.priceFeed memory oraclePrice = IOracle(supraStorageOracle)
-                .getSvalue(dispute.positions[i].oracleId);
-            // close position
-            int256 priceChange = (int256(oraclePrice.price) -
-                int256(dispute.positions[i].entryPrice));
-            if (!dispute.positions[i].isLong) {
-                priceChange = -priceChange;
-            }
-            int256 multiplier = (1 +
-                (priceChange * int256(dispute.positions[i].leverageFactor)) /
-                int256(dispute.positions[i].entryPrice));
-            if (multiplier < 0) {
-                continue;
-            }
-            uint256 uMul = uint256(multiplier);
-            // win
-            for (
-                uint256 j = 0;
-                j < dispute.positions[i].collaterals.length;
-                j++
-            ) {
-                IOracle.priceFeed memory collateralOraclePrice = IOracle(
-                    supraStorageOracle
-                ).getSvalue(dispute.positions[i].collaterals[j].oracleId);
-                // transfer token
-                IERC20(dispute.positions[i].token).transfer(
-                    dispute.user,
-                    (((dispute.positions[i].collaterals[j].quantity * uMul) /
-                        ONE) * collateralOraclePrice.price) /
-                        collateralOraclePrice.decimals
-                );
-
-                dispute.positions[i].collaterals[j].quantity = 0;
-            }
-        }
-
-        uint256 len = dispute.balances.length;
-
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < dispute.balances.length; i++) {
             address token = dispute.balances[i].addr;
-            uint256 amount = dispute.balances[i].balance;
-            if (
-                amount > depositedAmount[dispute.user][dispute.balances[0].addr]
-            ) {
-                uint256 pnl = amount -
-                    depositedAmount[dispute.user][dispute.balances[0].addr];
-                ILpProvider(lpProvider).decreaseLpProvidedAmount(token, pnl);
+            uint256 amount = updatedBalances[i];
+
+            if (isProfits[i]) {
+                ILpProvider(lpProvider).decreaseLpProvidedAmount(token, pnlValues[i]);
             } else {
-                uint256 pnl = depositedAmount[dispute.user][
-                    dispute.balances[0].addr
-                ] - amount;
-                IERC20(token).transfer(lpProvider, pnl);
-                ILpProvider(lpProvider).increaseLpProvidedAmount(token, pnl);
+                IERC20(token).transfer(lpProvider, pnlValues[i]);
+                ILpProvider(lpProvider).increaseLpProvidedAmount(token, pnlValues[i]);
             }
 
-            depositedAmount[dispute.user][dispute.balances[0].addr] = 0;
+            depositedAmount[dispute.user][token] = 0;
             IERC20(token).transfer(dispute.user, amount);
-            emit Withdrawn(msg.sender, token, amount);
+            emit Withdrawn(dispute.user, token, amount);
+
+            dispute.balances[i].balance = amount;
         }
 
         dispute.status = uint8(DisputeStatus.Settled);
-        emit DisputeSettled(requestId, msg.sender);
+        emit DisputeSettled(requestId, dispute.user);
     }
 
-    /**
-     * @dev Sets the trusted signer's address for validating Session and Participants information.
-     *
-     * Emits a {TrustedSignerChanged} event indicating the previous signer and the newly set signer.
-     *
-     * Requirements:
-     * - The provided address must not be the zero address.
-     *
-     * @param _newSigner (address) The address of the trusted signer.
-     */
-    function setTrustedSigner(address _newSigner) public onlyOwner {
-        if (_newSigner == address(0)) {
-            revert InvalidAddress();
-        }
-        address prevSigner = _trustedSigner;
-        _trustedSigner = _newSigner;
-
-        emit TrustedSignerChanged(prevSigner, _newSigner);
-    }
 
     function setSignatureExpiryTime(uint256 _expiryTime) external onlyOwner {
         signatureExpiryTime = _expiryTime;
@@ -712,21 +538,5 @@ contract Vault is
         address _combinedPublicKey
     ) external onlyOwner {
         combinedPublicKey[_user] = _combinedPublicKey;
-    }
-
-    function requireRootVerified(
-        bytes32 root,
-        uint256[2] memory sigs,
-        uint256 committee_id
-    ) private view {
-        (bool status, ) = address(supraVerifier).staticcall(
-            abi.encodeCall(
-                ISupraVerifier.requireHashVerified_V2,
-                (root, sigs, committee_id)
-            )
-        );
-        if (!status) {
-            revert DataNotVerified();
-        }
     }
 }
