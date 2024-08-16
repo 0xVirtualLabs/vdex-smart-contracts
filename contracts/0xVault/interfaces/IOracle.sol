@@ -9,5 +9,5 @@ interface IOracle {
         uint256 price;
     }
 
-    function getSvalue(address pairIndex) external view returns (priceFeed memory);
+    function getSvalue(uint256 pairIndex) external view returns (priceFeed memory);
 }

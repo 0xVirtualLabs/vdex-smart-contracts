@@ -10,7 +10,7 @@ library Dex {
 
     function _getPriceByPairId(
         SupraOracleDecoder.CommitteeFeed[] memory allFeeds,
-        uint32 pair
+        uint256 pair
     ) public pure returns (uint128) {
         for (uint256 i = 0; i < allFeeds.length; i++) {
             if (allFeeds[i].pair == pair) {
