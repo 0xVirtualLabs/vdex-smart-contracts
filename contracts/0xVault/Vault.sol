@@ -71,7 +71,6 @@ contract Vault is
         uint256 amount,
         uint32 requestId
     );
-    event PositionClosed(string positionId, uint256 tokenAmount);
     event TokenAdded(address indexed token);
     event TokenRemoved(address indexed token);
     event LPProvided(
@@ -417,8 +416,12 @@ contract Vault is
         uint32 requestId,
         // bytes[] calldata bytesProofs, // different timestamp, different bytesProof
         Crypto.LiquidatedPosition[] memory positions // positionIds and priceIndexs for mapping liquidated position with oracle price at the liquidated timestamp
+    )
+        external
         // string[] memory priceIndexs
-    ) external nonReentrant whenNotPaused {
+        nonReentrant
+        whenNotPaused
+    {
         uint256 liquidatedLen = positions.length;
 
         Dispute storage dispute = _disputes[requestId];
@@ -430,7 +433,6 @@ contract Vault is
             block.timestamp < dispute.timestamp + 1800, // fake 30m
             "Dispute window closed"
         );
-
 
         // uint256 proofLen = bytesProofs.length;
         // uint256 paircnt = 0;
@@ -471,12 +473,11 @@ contract Vault is
         // we have feeds, we have positionIds, we have priceIndexs (positionIds and priceIndexs are mapping)
         // => loop all position, get feeds price from priceIndexs, remove liquidated positions
         for (uint i = 0; i < dispute.positions.length; i++) {
-            
             // no leverage
             if (dispute.positions[i].leverageFactor == 1) {
                 continue;
             }
-            
+
             // loop over liquidated positions
             for (uint j = 0; j < liquidatedLen; j++) {
                 if (
@@ -488,8 +489,10 @@ contract Vault is
 
                 // get priceFeeds for position
                 SupraOracleDecoder.CommitteeFeed[] memory positionFeeds;
-                SupraOracleDecoder.OracleProofV2 memory oracle = SupraOracleDecoder
-                    .decodeOracleProof(positions[j].proofBytes);
+                SupraOracleDecoder.OracleProofV2
+                    memory oracle = SupraOracleDecoder.decodeOracleProof(
+                        positions[j].proofBytes
+                    );
                 uint256 feedIndex = 0;
                 for (uint256 k = 0; k < oracle.data.length; k++) {
                     SupraOracleDecoder.CommitteeFeed[] memory feeds = oracle
@@ -502,10 +505,18 @@ contract Vault is
                     }
                 }
                 if (
-                    Dex._checkLiquidatedPosition(dispute.positions[i], positionFeeds, dispute.balances)
+                    Dex._checkLiquidatedPosition(
+                        dispute.positions[i],
+                        positionFeeds,
+                        dispute.balances
+                    )
                 ) {
                     dispute.positions[i].quantity = 0;
-                    if (keccak256(abi.encodePacked(dispute.positions[i].leverageType)) == keccak256(abi.encodePacked("cross"))) {
+                    if (
+                        keccak256(
+                            abi.encodePacked(dispute.positions[i].leverageType)
+                        ) == keccak256(abi.encodePacked("cross"))
+                    ) {
                         // update user balance if cross position is liquidated
                         for (uint256 k = 0; k < dispute.balances.length; k++) {
                             dispute.balances[k].balance = 0;
@@ -516,8 +527,9 @@ contract Vault is
         }
     }
 
-
-    function liquidatePartially(Crypto.SchnorrSignature calldata _schnorr) external onlyOwner {
+    function liquidatePartially(
+        Crypto.SchnorrSignature calldata _schnorr
+    ) external onlyOwner {
         if (
             !Crypto._verifySchnorrSignature(
                 _schnorr,
@@ -539,7 +551,11 @@ contract Vault is
         uint256 len = data.balances.length;
         Crypto.Balance[] memory availableBalance = new Crypto.Balance[](len);
         for (uint i = 0; i < len; i++) {
-            availableBalance[i] = Crypto.Balance(data.balances[i].oracleId, data.balances[i].addr, 0);
+            availableBalance[i] = Crypto.Balance(
+                data.balances[i].oracleId,
+                data.balances[i].addr,
+                0
+            );
         }
 
         // Calculate available balance from SchnorrData balances
@@ -570,8 +586,13 @@ contract Vault is
         for (uint i = 0; i < len; i++) {
             address assetId = data.balances[i].addr;
             uint256 loss = 0;
-            if (depositedAmount[data.addr][assetId] > availableBalance[i].balance) {
-                loss = depositedAmount[data.addr][assetId] - availableBalance[i].balance;
+            if (
+                depositedAmount[data.addr][assetId] >
+                availableBalance[i].balance
+            ) {
+                loss =
+                    depositedAmount[data.addr][assetId] -
+                    availableBalance[i].balance;
             }
             // Transfer realized loss to insurance pool
             if (loss > 0) {
@@ -598,42 +619,40 @@ contract Vault is
             if (dispute.positions[i].quantity == 0) {
                 continue;
             }
-            IOracle.priceFeed memory oraclePrice = IOracle(supraStorageOracle).getSvalue(
-                dispute.positions[i].oracleId
-            );
+            IOracle.priceFeed memory oraclePrice = IOracle(supraStorageOracle)
+                .getSvalue(dispute.positions[i].oracleId);
             // close position
-            int256 priceChange = int256(oraclePrice.price) -
-                int256(dispute.positions[i].entryPrice);
-            uint256 pnl = 0;
-            // uint256 leverage = (dispute.positions[i].margin * ONE) /
-            //     dispute.positions[i].quantity;
-            uint256 leverage = 2;
-            if (priceChange > 0) {
-                // win
-                pnl =
-                    (ONE +
-                        ((leverage * uint256(priceChange) * ONE) /
-                            dispute.positions[i].entryPrice) /
-                        ONE) *
-                    dispute.positions[i].quantity;
-                dispute.positions[i].quantity += pnl / ONE;
-            } else {
-                // loss
-                pnl =
-                    (ONE -
-                        ((leverage * uint256(priceChange) * ONE) /
-                            dispute.positions[i].entryPrice) /
-                        ONE) *
-                    dispute.positions[i].quantity;
-                dispute.positions[i].quantity -= pnl / ONE;
+            int256 priceChange = (int256(oraclePrice.price) -
+                int256(dispute.positions[i].entryPrice));
+            if (!dispute.positions[i].isLong) {
+                priceChange = -priceChange;
             }
+            int256 multiplier = (1 +
+                (priceChange * int256(dispute.positions[i].leverageFactor)) /
+                int256(dispute.positions[i].entryPrice));
+            if (multiplier < 0) {
+                continue;
+            }
+            uint256 uMul = uint256(multiplier);
+            // win
+            for (
+                uint256 j = 0;
+                j < dispute.positions[i].collaterals.length;
+                j++
+            ) {
+                IOracle.priceFeed memory collateralOraclePrice = IOracle(
+                    supraStorageOracle
+                ).getSvalue(dispute.positions[i].collaterals[j].oracleId);
+                // transfer token
+                IERC20(dispute.positions[i].token).transfer(
+                    dispute.user,
+                    (((dispute.positions[i].collaterals[j].quantity * uMul) /
+                        ONE) * collateralOraclePrice.price) /
+                        collateralOraclePrice.decimals
+                );
 
-            // transfer token
-            IERC20(dispute.positions[i].token).transfer(
-                dispute.user,
-                dispute.positions[i].quantity
-            );
-            emit PositionClosed(dispute.positions[i].positionId, pnl / ONE);
+                dispute.positions[i].collaterals[j].quantity = 0;
+            }
         }
 
         uint256 len = dispute.balances.length;

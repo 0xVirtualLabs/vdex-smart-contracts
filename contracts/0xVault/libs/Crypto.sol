@@ -75,7 +75,7 @@ library Crypto {
         uint256 oracleId;
         address token;
         uint256 quantity;
-        uint32 leverageFactor;
+        uint256 leverageFactor;
         string leverageType;
         bool isLong;
         Collateral[] collaterals;
