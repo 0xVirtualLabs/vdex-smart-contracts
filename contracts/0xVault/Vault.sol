@@ -414,12 +414,11 @@ contract Vault is
 
     function challengeLiquidatedPosition(
         uint32 requestId,
-        bytes[] calldata bytesProofs, // different timestamp, different bytesProof
-        string[] memory positionIds, // positionIds and priceIndexs for mapping liquidated position with oracle price at the liquidated timestamp
-        string[] memory priceIndexs
+        // bytes[] calldata bytesProofs, // different timestamp, different bytesProof
+        Crypto.LiquidatedPosition[] memory positions // positionIds and priceIndexs for mapping liquidated position with oracle price at the liquidated timestamp
+        // string[] memory priceIndexs
     ) external nonReentrant whenNotPaused {
-        uint256 liquidatedLen = positionIds.length;
-        require(liquidatedLen == priceIndexs.length, "Invalid input");
+        uint256 liquidatedLen = positions.length;
 
         Dispute storage dispute = _disputes[requestId];
         require(
@@ -431,11 +430,12 @@ contract Vault is
             "Dispute window closed"
         );
 
-        uint256 proofLen = bytesProofs.length;
-        uint256 paircnt = 0;
-        for (uint256 i = 0; i < proofLen; i++) {
+
+        // uint256 proofLen = bytesProofs.length;
+        // uint256 paircnt = 0;
+        for (uint256 i = 0; i < liquidatedLen; i++) {
             SupraOracleDecoder.OracleProofV2 memory oracle = SupraOracleDecoder
-                .decodeOracleProof(bytesProofs[i]);
+                .decodeOracleProof(positions[i].proofBytes);
             // verify oracle proof
             uint256 orcLen = oracle.data.length;
             for (uint256 j = 0; j < orcLen; j++) {
@@ -444,46 +444,64 @@ contract Vault is
                     oracle.data[j].sigs,
                     oracle.data[j].committee_id
                 );
-                paircnt += oracle.data[j].committee_data.committee_feeds.length;
+                // paircnt += oracle.data[j].committee_data.committee_feeds.length;
             }
         }
 
-        SupraOracleDecoder.CommitteeFeed[]
-            memory allFeeds = new SupraOracleDecoder.CommitteeFeed[](paircnt);
-        uint256 feedIndex = 0;
-        for (uint256 i = 0; i < proofLen; i++) {
-            SupraOracleDecoder.OracleProofV2 memory oracle = SupraOracleDecoder
-                .decodeOracleProof(bytesProofs[i]);
-            uint256 orcLen = oracle.data.length;
-            for (uint256 j = 0; j < orcLen; j++) {
-                SupraOracleDecoder.CommitteeFeed[] memory feeds = oracle
-                    .data[j]
-                    .committee_data
-                    .committee_feeds;
-                for (uint256 k = 0; k < feeds.length; k++) {
-                    allFeeds[feedIndex] = feeds[k];
-                    feedIndex++;
-                }
-            }
-        }
+        // SupraOracleDecoder.CommitteeFeed[]
+        //     memory allFeeds = new SupraOracleDecoder.CommitteeFeed[](paircnt);
+        // uint256 feedIndex = 0;
+        // for (uint256 i = 0; i < proofLen; i++) {
+        //     SupraOracleDecoder.OracleProofV2 memory oracle = SupraOracleDecoder
+        //         .decodeOracleProof(positions[i].proofBytes);
+        //     uint256 orcLen = oracle.data.length;
+        //     for (uint256 j = 0; j < orcLen; j++) {
+        //         SupraOracleDecoder.CommitteeFeed[] memory feeds = oracle
+        //             .data[j]
+        //             .committee_data
+        //             .committee_feeds;
+        //         for (uint256 k = 0; k < feeds.length; k++) {
+        //             allFeeds[feedIndex] = feeds[k];
+        //             feedIndex++;
+        //         }
+        //     }
+        // }
 
         // we have feeds, we have positionIds, we have priceIndexs (positionIds and priceIndexs are mapping)
         // => loop all position, get feeds price from priceIndexs, remove liquidated positions
         for (uint i = 0; i < dispute.positions.length; i++) {
+            
             // no leverage
             if (dispute.positions[i].leverageFactor == 1) {
                 continue;
             }
             
+            // loop over liquidated positions
             for (uint j = 0; j < liquidatedLen; j++) {
                 if (
                     keccak256(bytes(dispute.positions[i].positionId)) !=
-                    keccak256(bytes(positionIds[j]))
+                    keccak256(bytes(positions[j].positionId))
                 ) {
                     continue;
                 }
+
+                // get priceFeeds for position
+                SupraOracleDecoder.CommitteeFeed[] memory positionFeeds;
+                SupraOracleDecoder.OracleProofV2 memory oracle = SupraOracleDecoder
+                    .decodeOracleProof(positions[j].proofBytes);
+                uint256 feedIndex = 0;
+                for (uint256 j = 0; j < oracle.data.length; j++) {
+                    SupraOracleDecoder.CommitteeFeed[] memory feeds = oracle
+                        .data[j]
+                        .committee_data
+                        .committee_feeds;
+                    for (uint256 k = 0; k < feeds.length; k++) {
+                        positionFeeds[feedIndex] = feeds[k];
+                        feedIndex++;
+                    }
+                }
                 if (
-                    _checkLiquidatedPosition(dispute.positions[i], allFeeds, dispute.balances)
+                    _checkLiquidatedPosition(dispute.positions[i], positionFeeds, dispute.balances)
                 ) {
                     dispute.positions[i].quantity = 0;
                     if (keccak256(abi.encodePacked(dispute.positions[i].leverageType)) == keccak256(abi.encodePacked("cross"))) {
@@ -517,14 +535,14 @@ contract Vault is
         }
     }
 
-    function _getPriceByPairId(SupraOracleDecoder.CommitteeFeed[] memory allFeeds, uint32 pair)
+    function _getPriceByPairId(SupraOracleDecoder.CommitteeFeed[] memory priceFeeds, uint32 pair)
         internal
         pure
         returns (uint128)
     {
-        for (uint256 i = 0; i < allFeeds.length; i++) {
-            if (allFeeds[i].pair == pair) {
-                return allFeeds[i].price;
+        for (uint256 i = 0; i < priceFeeds.length; i++) {
+            if (priceFeeds[i].pair == pair) {
+                return priceFeeds[i].price;
             }
         }
         
@@ -533,9 +551,9 @@ contract Vault is
 
     function _getPositionLoss(
         Crypto.Position memory position,
-        SupraOracleDecoder.CommitteeFeed[] memory allFeeds
+        SupraOracleDecoder.CommitteeFeed[] memory priceFeeds
     ) internal pure returns (uint256) {
-        uint256 totalPositionValue = position.quantity * _getPriceByPairId(allFeeds, position.oracleId);
+        uint256 totalPositionValue = position.quantity * _getPriceByPairId(priceFeeds, position.oracleId);
         uint256 positionInitialValue = position.quantity * position.entryPrice;
 
         if (position.isLong) {
@@ -553,18 +571,18 @@ contract Vault is
 
     function _checkLiquidatedPosition(
         Crypto.Position memory position,
-        SupraOracleDecoder.CommitteeFeed[] memory allFeeds,
+        SupraOracleDecoder.CommitteeFeed[] memory priceFeeds,
         Crypto.Balance[] memory balances
     ) internal pure returns (bool) {
         uint256 totalPositionLoss = 0;
         uint256 totalPositionInitialCollateral = 0;
 
         // position loss
-        totalPositionLoss += _getPositionLoss(position, allFeeds);
+        totalPositionLoss += _getPositionLoss(position, priceFeeds);
 
         uint256 collateralCurrentValue = 0;
         for (uint256 j = 0; j < position.collaterals.length; j++) {
-            collateralCurrentValue += position.collaterals[j].quantity * _getPriceByPairId(allFeeds, position.collaterals[j].oracleId);
+            collateralCurrentValue += position.collaterals[j].quantity * _getPriceByPairId(priceFeeds, position.collaterals[j].oracleId);
             totalPositionInitialCollateral += position.collaterals[j].entryPrice * position.collaterals[j].quantity;
         }
 
@@ -573,7 +591,7 @@ contract Vault is
         // cross position
         if (keccak256(abi.encodePacked(position.leverageType)) == keccak256(abi.encodePacked("cross"))) {
             for (uint256 i = 0; i < balances.length; i++) {
-                totalPositionInitialCollateral += balances[i].balance * _getPriceByPairId(allFeeds, balances[i].oracleId);
+                totalPositionInitialCollateral += balances[i].balance * _getPriceByPairId(priceFeeds, balances[i].oracleId);
             }
         }
 

@@ -65,6 +65,11 @@ library Crypto {
         uint256 entryPrice;
     }
 
+    struct LiquidatedPosition {
+        string positionId;
+        bytes proofBytes;
+    }
+
     struct Position {
         string positionId;
         uint32 oracleId;
