@@ -130,7 +130,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address token,
         uint256 amount
     ) private view returns (uint256) {
-        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(token);
+        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(pairId[token]);
         uint256 usdAmount = amount * oraclePrice.price;
         if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
@@ -153,7 +153,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address token,
         uint256 navAmount
     ) private view returns (uint256) {
-        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(token);
+        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(pairId[token]);
         if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
                 ((navAmount * navPrices[token]) /

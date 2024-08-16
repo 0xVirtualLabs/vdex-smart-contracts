@@ -71,7 +71,7 @@ contract Vault is
         uint256 amount,
         uint32 requestId
     );
-    event PositionClosed(uint256 positionId, uint256 tokenAmount);
+    event PositionClosed(string positionId, uint256 tokenAmount);
     event TokenAdded(address indexed token);
     event TokenRemoved(address indexed token);
     event LPProvided(
@@ -605,8 +605,9 @@ contract Vault is
             int256 priceChange = int256(oraclePrice.price) -
                 int256(dispute.positions[i].entryPrice);
             uint256 pnl = 0;
-            uint256 leverage = (dispute.positions[i].margin * ONE) /
-                dispute.positions[i].quantity;
+            // uint256 leverage = (dispute.positions[i].margin * ONE) /
+            //     dispute.positions[i].quantity;
+            uint256 leverage = 2;
             if (priceChange > 0) {
                 // win
                 pnl =
