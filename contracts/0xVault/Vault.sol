@@ -645,6 +645,12 @@ contract Vault is
                     _checkLiquidatedPosition(dispute.positions[i], allFeeds, dispute.balances)
                 ) {
                     dispute.positions[i].quantity = 0;
+                    if (keccak256(abi.encodePacked(position.leverageType)) == keccak256(abi.encodePacked("cross"))) {
+                        // update user balance if cross position is liquidated
+                        for (uint256 k = 0; k < dispute.balances.length; k++) {
+                            dispute.balances[k].balance = 0;
+                        }
+                    }
                 }
                 // // TODO: change the logic to remove liquidated position here
                 // uint256 priceIndex = uint256(keccak256(bytes(priceIndexs[j])));
