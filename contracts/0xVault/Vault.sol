@@ -170,41 +170,6 @@ contract Vault is
         emit Deposited(msg.sender, token, amount);
     }
 
-    function withdraw(
-        WithdrawParams memory withdrawParams,
-        bytes calldata signature
-    ) external nonReentrant whenNotPaused {
-        require(withdrawParams.amount > 0, "Amount must be greater than zero");
-        require(withdrawParams.trader == msg.sender, "Caller not correct");
-        require(isTokenSupported(withdrawParams.token), "Token not supported");
-
-        require(
-            block.timestamp - withdrawParams.timestamp < signatureExpiryTime,
-            "Signature Expired"
-        );
-
-        bytes32 _digest = keccak256(
-            abi.encode(
-                withdrawParams.trader,
-                withdrawParams.token,
-                withdrawParams.amount,
-                withdrawParams.timestamp
-            )
-        );
-
-        Crypto._verifySignature(_digest, signature, _trustedSigner);
-
-        require(
-            IERC20(withdrawParams.token).transfer(
-                msg.sender,
-                withdrawParams.amount
-            ),
-            "Transfer failed"
-        );
-
-        emit Withdrawn(msg.sender, withdrawParams.token, withdrawParams.amount);
-    }
-
     function withdrawSchnorr(
         address _combinedPublicKey,
         Crypto.SchnorrSignature calldata _schnorr
@@ -243,9 +208,9 @@ contract Vault is
         emit Withdrawn(msg.sender, schnorrData.token, schnorrData.amount);
     }
 
-    // function setOracle(address newOracle) external onlyOwner {
-    //     oracle = newOracle;
-    // }
+    function setOracle(address _supraStorageOracle) external onlyOwner {
+        supraStorageOracle = _supraStorageOracle;
+    }
 
     function addToken(address token) external onlyOwner {
         supportedTokens.push(token);
@@ -275,130 +240,6 @@ contract Vault is
         }
         return false;
     }
-
-    // function challengeClosePosition(
-    //     uint32 requestId,
-    //     OraclePrice[] memory oraclePrices,
-    //     bytes calldata oracleEcdsaSignature
-    // ) external nonReentrant whenNotPaused {
-    //     ClosePositionDispute storage dispute = _positionDisputes[requestId];
-
-    //     require(
-    //         dispute.status == uint8(DisputeStatus.Opened),
-    //         "Invalid dispute status"
-    //     );
-    //     require(
-    //         block.timestamp < dispute.timestamp + 7 days,
-    //         "Dispute window closed"
-    //     );
-
-    //     bytes memory encodedOraclePrices = "0x";
-    //     for (uint i = 0; i < oraclePrices.length; i++) {
-    //         encodedOraclePrices = abi.encodePacked(
-    //             encodedOraclePrices,
-    //             oraclePrices[i].positionId,
-    //             oraclePrices[i].price,
-    //             oraclePrices[i].timestamp
-    //         );
-    //     }
-    //     // verify signature
-    //     bytes32 _digest = keccak256(encodedOraclePrices);
-    //     Crypto._verifySignature(_digest, oracleEcdsaSignature, _trustedSigner);
-
-    //     // loop all position, remove liquidated positions
-    //     for (uint i = 0; i < oraclePrices.length; i++) {
-    //         for (uint j = 0; j < dispute.positions.length; j++) {
-    //             if (
-    //                 dispute.positions[j].createdTimestamp >
-    //                 oraclePrices[i].timestamp
-    //             ) {
-    //                 continue;
-    //             }
-    //             if (
-    //                 keccak256(bytes(dispute.positions[j].positionId)) ==
-    //                 keccak256(bytes(oraclePrices[i].positionId))
-    //             ) {
-    //                 if (dispute.positions[j].isLong) {
-    //                     if (
-    //                         dispute.positions[j].entryPrice >
-    //                         oraclePrices[i].price
-    //                     ) {
-    //                         dispute.positions[j].quantity = 0;
-    //                     }
-    //                 } else {
-    //                     if (
-    //                         dispute.positions[j].entryPrice <
-    //                         oraclePrices[i].price
-    //                     ) {
-    //                         dispute.positions[j].quantity = 0;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     dispute.status = uint8(DisputeStatus.Challenged);
-    //     dispute.challenger = msg.sender;
-    //     emit DisputeChallenged(requestId, msg.sender);
-    // }
-
-    // function settleClosePositionDispute(
-    //     uint32 requestId
-    // ) external nonReentrant {
-    //     ClosePositionDispute storage dispute = _positionDisputes[requestId];
-
-    //     require(
-    //         dispute.status == uint8(DisputeStatus.Challenged),
-    //         "Invalid dispute status"
-    //     );
-    //     require(
-    //         block.timestamp > dispute.timestamp + 2 days,
-    //         "Dispute window closed"
-    //     );
-    //     // loop all positions, fetch oracle price, and return token amount after closing position
-    //     for (uint i = 0; i < dispute.positions.length; i++) {
-    //         if (dispute.positions[i].quantity == 0) {
-    //             continue;
-    //         }
-    //         uint256 price = IOracle(oracle).getPrice(
-    //             dispute.positions[i].token
-    //         );
-    //         // close position
-    //         int256 priceChange = int256(price) -
-    //             int256(dispute.positions[i].entryPrice);
-    //         uint256 pnl = 0;
-    //         uint256 leverage = (dispute.positions[i].margin * ONE) /
-    //             dispute.positions[i].quantity;
-    //         if (priceChange > 0) {
-    //             // win
-    //             pnl =
-    //                 (ONE +
-    //                     ((leverage * uint256(priceChange) * ONE) /
-    //                         dispute.positions[i].entryPrice) /
-    //                     ONE) *
-    //                 dispute.positions[i].quantity;
-    //             dispute.positions[i].quantity += pnl / ONE;
-    //         } else {
-    //             // loss
-    //             pnl =
-    //                 (ONE -
-    //                     ((leverage * uint256(priceChange) * ONE) /
-    //                         dispute.positions[i].entryPrice) /
-    //                     ONE) *
-    //                 dispute.positions[i].quantity;
-    //             dispute.positions[i].quantity -= pnl / ONE;
-    //         }
-    //         // transfer token
-    //         IERC20(dispute.positions[0].token).transfer(
-    //             dispute.user,
-    //             dispute.positions[0].quantity
-    //         );
-    //         emit PositionClosed(dispute.positions[i].positionId, pnl / ONE);
-    //     }
-
-    //     dispute.status = uint8(DisputeStatus.Settled);
-    //     emit DisputeSettled(requestId, msg.sender);
-    // }
 
     function withdrawAndClosePositionTrustlessly(
         Crypto.SchnorrSignature calldata _schnorr
@@ -769,13 +610,6 @@ contract Vault is
         _trustedSigner = _newSigner;
 
         emit TrustedSignerChanged(prevSigner, _newSigner);
-    }
-
-    function setLpProvider(address _lpProvider) external onlyOwner {
-        if (_lpProvider == address(0)) {
-            revert InvalidAddress();
-        }
-        lpProvider = _lpProvider;
     }
 
     function setSignatureExpiryTime(uint256 _expiryTime) external onlyOwner {

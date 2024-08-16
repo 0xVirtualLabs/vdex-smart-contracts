@@ -27,6 +27,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public startEpochTimestamp; // Timestamp of the start of the epoch
     uint256 public epochPeriod; // Duration of each epoch
     uint256 public withdrawalDelayTime; // Delay time for withdrawals
+    mapping(address => uint256) public pairId; // token => pairId
 
     // Mappings
     mapping(address => bool) public isLPProvider; // Tracks whether an address is an LP provider
@@ -129,15 +130,15 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address token,
         uint256 amount
     ) private view returns (uint256) {
-        uint256 priceDecimals = IOracle(oracle).decimals();
-        uint256 usdAmount = amount * IOracle(oracle).getPrice(token);
-        if (NAV_DECIMALS >= priceDecimals) {
+        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(token);
+        uint256 usdAmount = amount * oraclePrice.price;
+        if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
-                (usdAmount * (10 ** (NAV_DECIMALS - priceDecimals))) /
+                (usdAmount * (10 ** (NAV_DECIMALS - oraclePrice.decimals))) /
                 navPrices[token];
         } else {
             return
-                (usdAmount / (10 ** (priceDecimals - NAV_DECIMALS))) /
+                (usdAmount / (10 ** (oraclePrice.decimals - NAV_DECIMALS))) /
                 navPrices[token];
         }
     }
@@ -152,17 +153,17 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address token,
         uint256 navAmount
     ) private view returns (uint256) {
-        uint256 priceDecimals = IOracle(oracle).decimals();
-        if (NAV_DECIMALS >= priceDecimals) {
+        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(token);
+        if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
                 ((navAmount * navPrices[token]) /
-                    (10 ** (NAV_DECIMALS - priceDecimals))) /
-                IOracle(oracle).getPrice(token);
+                    (10 ** (NAV_DECIMALS - oraclePrice.decimals))) /
+                oraclePrice.price;
         } else {
             return
                 ((navAmount * navPrices[token]) *
-                    (10 ** (priceDecimals - NAV_DECIMALS))) /
-                IOracle(oracle).getPrice(token);
+                    (10 ** (oraclePrice.decimals - NAV_DECIMALS))) /
+                oraclePrice.price;
         }
     }
 
@@ -404,6 +405,16 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         require(_oracle != address(0), "Invalid oracle address");
         oracle = _oracle;
         emit OracleChanged(_oracle);
+    }
+
+    function setPairIDForTokens(
+        address[] calldata tokens,
+        uint256[] calldata ids
+    ) external onlyOwner {
+        require(tokens.length == ids.length, "Invalid input");
+        for (uint256 i = 0; i < tokens.length; i++) {
+            pairId[tokens[i]] = ids[i];
+        }
     }
 
     /**
