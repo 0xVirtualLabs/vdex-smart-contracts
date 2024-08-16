@@ -498,6 +498,69 @@ contract Vault is
         }
     }
 
+    function liquidatePartially(Crypto.SchnorrSignature calldata _schnorr) external onlyOwner {
+        if (
+            !Crypto._verifySchnorrSignature(
+                _schnorr,
+                combinedPublicKey[msg.sender]
+            )
+        ) {
+            revert InvalidSchnorrSignature();
+        }
+
+        Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(
+            _schnorr.data
+        );
+
+        if (data.addr != msg.sender) {
+            revert InvalidSchnorrSignature();
+        }
+
+        // Initialize availableBalance
+        uint256 len = data.balances.length;
+        Crypto.Balance[] memory availableBalance = new Crypto.Balance[](len);
+        for (uint i = 0; i < len; i++) {
+            availableBalance[i] = Crypto.Balance(data.balances[i].oracleId, data.balances[i].addr, 0);
+        }
+
+        // Calculate available balance from SchnorrData balances
+        for (uint i = 0; i < len; i++) {
+            for (uint j = 0; j < availableBalance.length; j++) {
+                if (data.balances[i].addr == availableBalance[j].addr) {
+                    availableBalance[j].balance += data.balances[i].balance;
+                    break;
+                }
+            }
+        }
+
+        // Add initial margins to available balance from SchnorrData positions
+        uint256 posLen = data.positions.length;
+        for (uint i = 0; i < posLen; i++) {
+            for (uint j = 0; j < data.positions[i].collaterals.length; j++) {
+                Crypto.Collateral memory im = data.positions[i].collaterals[j];
+                for (uint k = 0; k < availableBalance.length; k++) {
+                    if (im.token == availableBalance[k].addr) {
+                        availableBalance[k].balance += im.quantity;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Initialize and calculate realized loss
+        for (uint i = 0; i < len; i++) {
+            address assetId = data.balances[i].addr;
+            uint256 loss = 0;
+            if (depositedAmount[data.addr][assetId] > availableBalance[i].balance) {
+                loss = depositedAmount[data.addr][assetId] - availableBalance[i].balance;
+            }
+            // Transfer realized loss to insurance pool
+            // if (loss > 0) {
+            //     lpProvidedAmount[assetId] += loss;
+            // }
+        }
+    }
+
     function settleDispute(
         uint32 requestId
     ) external nonReentrant whenNotPaused {
