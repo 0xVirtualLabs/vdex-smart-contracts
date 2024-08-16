@@ -319,7 +319,7 @@ contract Vault is
         _openDispute(requestId, msg.sender);
     }
 
-    function _openDispute(uint32 requestId, address user) internal {
+    function _openDispute(uint32 requestId, address user) private {
         Dispute storage dispute = _disputes[requestId];
         dispute.status = uint8(DisputeStatus.Opened);
         dispute.user = user;
@@ -493,32 +493,12 @@ contract Vault is
                         }
                     }
                 }
-                // // TODO: change the logic to remove liquidated position here
-                // uint256 priceIndex = uint256(keccak256(bytes(priceIndexs[j])));
-                // uint256 price = allFeeds[priceIndex].price;
-                // if (dispute.positions[i].isLong) {
-                //     if (
-                //         _isPositionLiquidated(dispute.positions[i], price, true)
-                //     ) {
-                //         dispute.positions[i].quantity = 0;
-                //     }
-                // } else {
-                //     if (
-                //         _isPositionLiquidated(
-                //             dispute.positions[i],
-                //             price,
-                //             false
-                //         )
-                //     ) {
-                //         dispute.positions[i].quantity = 0;
-                //     }
-                // }
             }
         }
     }
 
     function _getPriceByPairId(SupraOracleDecoder.CommitteeFeed[] memory allFeeds, uint32 pair)
-        internal
+        private
         pure
         returns (uint128)
     {
@@ -534,7 +514,7 @@ contract Vault is
     function _getPositionLoss(
         Crypto.Position memory position,
         SupraOracleDecoder.CommitteeFeed[] memory allFeeds
-    ) internal pure returns (uint256) {
+    ) private pure returns (uint256) {
         uint256 totalPositionValue = position.quantity * _getPriceByPairId(allFeeds, position.oracleId);
         uint256 positionInitialValue = position.quantity * position.entryPrice;
 
@@ -555,7 +535,7 @@ contract Vault is
         Crypto.Position memory position,
         SupraOracleDecoder.CommitteeFeed[] memory allFeeds,
         Crypto.Balance[] memory balances
-    ) internal pure returns (bool) {
+    ) private pure returns (bool) {
         uint256 totalPositionLoss = 0;
         uint256 totalPositionInitialCollateral = 0;
 
@@ -591,15 +571,6 @@ contract Vault is
         }
 
         return false;
-    }
-
-    function _isPositionLiquidated(
-        Crypto.Position memory position,
-        uint256 price,
-        bool isLong
-    ) internal pure returns (bool) {
-        // TODO: update this code
-        return true;
     }
 
     function settleDispute(
