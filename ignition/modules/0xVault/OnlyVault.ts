@@ -13,8 +13,11 @@ const OnlyVaultModule = buildModule("OnlyVaultModule", (m) => {
   // This allows us to interact with the underlying Vault contract via the proxy from within tests and scripts.
   // const crypto = m.contractAt("Crypto", "0x479deC6c40916Cf6290FA21915bd42CE233c6E55");
   const crypto = m.library("Crypto");
+  const dex = m.library("Dex");
+  const supraOracleDecoder = m.library("SupraOracleDecoder");
+
   const vault = m.contract("Vault", [], {
-    libraries: { Crypto: crypto },
+    libraries: { Crypto: crypto, Dex: dex, SupraOracleDecoder: supraOracleDecoder },
   });
 
   // Return the contract instance, along with the original proxy and proxyAdmin contracts

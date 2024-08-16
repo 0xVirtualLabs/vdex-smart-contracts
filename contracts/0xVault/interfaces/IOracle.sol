@@ -2,6 +2,12 @@
 pragma solidity =0.8.24;
 
 interface IOracle {
-    function decimals() external view returns (uint8);
-    function getPrice(address token) external view returns (uint256);
+    struct priceFeed {
+        uint256 round;
+        uint256 decimals;
+        uint256 time;
+        uint256 price;
+    }
+
+    function getSvalue(uint256 pairIndex) external view returns (priceFeed memory);
 }
