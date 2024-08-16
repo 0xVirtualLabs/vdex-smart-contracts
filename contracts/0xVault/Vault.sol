@@ -34,7 +34,7 @@ contract Vault is
     mapping(uint32 => uint32) private _latestSchnorrSignatureId;
 
     mapping(address => address) public combinedPublicKey;
-    address[] private supportedTokens;
+    mapping(address => bool) public isTokenSupported;
     uint256 constant ONE = 1e9;
     address public supraStorageOracle;
     address public supraVerifier;
@@ -72,6 +72,11 @@ contract Vault is
         uint256 amount
     );
     event LPWithdrawn(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
+    event PartialLiquidation(
         address indexed user,
         address indexed token,
         uint256 amount
@@ -155,7 +160,7 @@ contract Vault is
         uint256 amount
     ) external nonReentrant whenNotPaused {
         require(amount > 0, "Amount must be greater than zero");
-        require(isTokenSupported(token), "Token not supported");
+        require(isTokenSupported[token], "Token not supported");
 
         require(
             IERC20(token).transferFrom(msg.sender, address(this), amount),
@@ -174,7 +179,7 @@ contract Vault is
             .decodeSchnorrDataWithdraw(_schnorr, combinedPublicKey[msg.sender]);
 
         require(schnorrData.amount > 0, "Amount must byese greater than zero");
-        require(isTokenSupported(schnorrData.token), "Token not supported");
+        require(isTokenSupported[schnorrData.token], "Token not supported");
 
         require(
             block.timestamp - schnorrData.timestamp < signatureExpiryTime,
@@ -199,33 +204,16 @@ contract Vault is
         supraStorageOracle = _supraStorageOracle;
     }
 
-    function addToken(address token) external onlyOwner {
-        supportedTokens.push(token);
-        emit TokenAdded(token);
-    }
-
-    function removeToken(address token) external onlyOwner {
-        for (uint i = 0; i < supportedTokens.length; i++) {
-            if (supportedTokens[i] == token) {
-                if (i != supportedTokens.length - 1) {
-                    supportedTokens[i] = supportedTokens[
-                        supportedTokens.length - 1
-                    ];
-                }
-                supportedTokens.pop();
-                emit TokenRemoved(token);
-                return;
-            }
+    function setSupportedToken(
+        address token,
+        bool isSupported
+    ) external onlyOwner {
+        isTokenSupported[token] = isSupported;
+        if (isSupported) {
+            emit TokenAdded(token);
+        } else {
+            emit TokenRemoved(token);
         }
-    }
-
-    function isTokenSupported(address token) public view returns (bool) {
-        for (uint i = 0; i < supportedTokens.length; i++) {
-            if (supportedTokens[i] == token) {
-                return true;
-            }
-        }
-        return false;
     }
 
     function withdrawAndClosePositionTrustlessly(
@@ -388,18 +376,28 @@ contract Vault is
         }
     }
 
-    function getDisputeStatus(uint32 requestId) external view returns (bool isOpenDispute, uint64 timestamp, address user) {
+    function getDisputeStatus(
+        uint32 requestId
+    )
+        external
+        view
+        returns (bool isOpenDispute, uint64 timestamp, address user)
+    {
         Dispute storage dispute = _disputes[requestId];
         isOpenDispute = dispute.status == uint8(DisputeStatus.Opened);
         timestamp = dispute.timestamp;
         user = dispute.user;
     }
 
-    function getDisputePositions(uint32 requestId) external view returns (Crypto.Position[] memory) {
+    function getDisputePositions(
+        uint32 requestId
+    ) external view returns (Crypto.Position[] memory) {
         return _disputes[requestId].positions;
     }
 
-    function getDisputeBalances(uint32 requestId) external view returns (Crypto.Balance[] memory) {
+    function getDisputeBalances(
+        uint32 requestId
+    ) external view returns (Crypto.Balance[] memory) {
         return _disputes[requestId].balances;
     }
 
@@ -410,9 +408,12 @@ contract Vault is
         bool isCrossLiquidated
     ) external {
         require(msg.sender == dexSupporter, "Require Dex Supporter");
-        
+
         Dispute storage dispute = _disputes[requestId];
-        require(dispute.status == uint8(DisputeStatus.Opened), "Invalid dispute status");
+        require(
+            dispute.status == uint8(DisputeStatus.Opened),
+            "Invalid dispute status"
+        );
 
         // Update liquidated positions
         for (uint256 i = 0; i < liquidatedCount; i++) {
@@ -428,70 +429,98 @@ contract Vault is
         }
     }
 
+    // function liquidatePartially(
+    //     address user,
+    //     Crypto.SchnorrSignature calldata _schnorr
+    // ) external onlyOwner {
+    //     Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(
+    //         _schnorr,
+    //         combinedPublicKey[user]
+    //     );
 
-    function liquidatePartially(
-        Crypto.SchnorrSignature calldata _schnorr
-    ) external onlyOwner {
-        Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(
-            _schnorr,
-            combinedPublicKey[msg.sender]
-        );
+    //     if (data.addr != user) {
+    //         revert InvalidSchnorrSignature();
+    //     }
 
-        if (data.addr != msg.sender) {
-            revert InvalidSchnorrSignature();
-        }
+    //     // Initialize availableBalance
+    //     uint256 len = data.balances.length;
+    //     Crypto.Balance[] memory availableBalance = new Crypto.Balance[](len);
+    //     for (uint i = 0; i < len; i++) {
+    //         availableBalance[i] = Crypto.Balance(
+    //             data.balances[i].oracleId,
+    //             data.balances[i].addr,
+    //             0
+    //         );
+    //     }
 
-        // Initialize availableBalance
-        uint256 len = data.balances.length;
-        Crypto.Balance[] memory availableBalance = new Crypto.Balance[](len);
-        for (uint i = 0; i < len; i++) {
-            availableBalance[i] = Crypto.Balance(
-                data.balances[i].oracleId,
-                data.balances[i].addr,
-                0
+    //     // Calculate available balance from SchnorrData balances
+    //     for (uint i = 0; i < len; i++) {
+    //         for (uint j = 0; j < availableBalance.length; j++) {
+    //             if (data.balances[i].addr == availableBalance[j].addr) {
+    //                 availableBalance[j].balance += data.balances[i].balance;
+    //                 break;
+    //             }
+    //         }
+    //     }
+
+    //     // Add initial margins to available balance from SchnorrData positions
+    //     uint256 posLen = data.positions.length;
+    //     for (uint i = 0; i < posLen; i++) {
+    //         for (uint j = 0; j < data.positions[i].collaterals.length; j++) {
+    //             Crypto.Collateral memory im = data.positions[i].collaterals[j];
+    //             for (uint k = 0; k < availableBalance.length; k++) {
+    //                 if (im.token == availableBalance[k].addr) {
+    //                     availableBalance[k].balance += im.quantity;
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     // Initialize and calculate realized loss
+    //     for (uint i = 0; i < len; i++) {
+    //         address assetId = data.balances[i].addr;
+    //         uint256 loss = 0;
+    //         if (
+    //             depositedAmount[data.addr][assetId] >
+    //             availableBalance[i].balance
+    //         ) {
+    //             loss =
+    //                 depositedAmount[data.addr][assetId] -
+    //                 availableBalance[i].balance;
+    //         }
+    //         // Transfer realized loss to insurance pool
+    //         if (loss > 0) {
+    //             ILpProvider(lpProvider).increaseLpProvidedAmount(assetId, loss);
+    //         }
+    //     }
+    // }
+
+    function updatePartialLiquidation(
+        address user,
+        address[] memory tokens,
+        uint256[] memory losses,
+        uint256 totalLossCount
+    ) external nonReentrant {
+        require(msg.sender == dexSupporter, "Unauthorized");
+        require(tokens.length == losses.length, "Array length mismatch");
+        require(totalLossCount <= tokens.length, "Invalid total loss count");
+
+        for (uint256 i = 0; i < totalLossCount; i++) {
+            address token = tokens[i];
+            uint256 loss = losses[i];
+
+            // Update deposited amount
+            require(
+                depositedAmount[user][token] >= loss,
+                "Insufficient deposited amount"
             );
-        }
+            depositedAmount[user][token] -= loss;
 
-        // Calculate available balance from SchnorrData balances
-        for (uint i = 0; i < len; i++) {
-            for (uint j = 0; j < availableBalance.length; j++) {
-                if (data.balances[i].addr == availableBalance[j].addr) {
-                    availableBalance[j].balance += data.balances[i].balance;
-                    break;
-                }
-            }
-        }
-
-        // Add initial margins to available balance from SchnorrData positions
-        uint256 posLen = data.positions.length;
-        for (uint i = 0; i < posLen; i++) {
-            for (uint j = 0; j < data.positions[i].collaterals.length; j++) {
-                Crypto.Collateral memory im = data.positions[i].collaterals[j];
-                for (uint k = 0; k < availableBalance.length; k++) {
-                    if (im.token == availableBalance[k].addr) {
-                        availableBalance[k].balance += im.quantity;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Initialize and calculate realized loss
-        for (uint i = 0; i < len; i++) {
-            address assetId = data.balances[i].addr;
-            uint256 loss = 0;
-            if (
-                depositedAmount[data.addr][assetId] >
-                availableBalance[i].balance
-            ) {
-                loss =
-                    depositedAmount[data.addr][assetId] -
-                    availableBalance[i].balance;
-            }
             // Transfer realized loss to insurance pool
-            if (loss > 0) {
-                ILpProvider(lpProvider).increaseLpProvidedAmount(assetId, loss);
-            }
+            ILpProvider(lpProvider).increaseLpProvidedAmount(token, loss);
+
+            emit PartialLiquidation(user, token, loss);
         }
     }
 
@@ -502,19 +531,28 @@ contract Vault is
         bool[] memory isProfits
     ) external nonReentrant {
         require(msg.sender == dexSupporter, "Unauthorized");
-        
+
         Dispute storage dispute = _disputes[requestId];
-        require(dispute.status == uint8(DisputeStatus.Opened), "Invalid dispute status");
+        require(
+            dispute.status == uint8(DisputeStatus.Opened),
+            "Invalid dispute status"
+        );
 
         for (uint256 i = 0; i < dispute.balances.length; i++) {
             address token = dispute.balances[i].addr;
             uint256 amount = updatedBalances[i];
 
             if (isProfits[i]) {
-                ILpProvider(lpProvider).decreaseLpProvidedAmount(token, pnlValues[i]);
+                ILpProvider(lpProvider).decreaseLpProvidedAmount(
+                    token,
+                    pnlValues[i]
+                );
             } else {
                 IERC20(token).transfer(lpProvider, pnlValues[i]);
-                ILpProvider(lpProvider).increaseLpProvidedAmount(token, pnlValues[i]);
+                ILpProvider(lpProvider).increaseLpProvidedAmount(
+                    token,
+                    pnlValues[i]
+                );
             }
 
             depositedAmount[dispute.user][token] = 0;
@@ -527,7 +565,6 @@ contract Vault is
         dispute.status = uint8(DisputeStatus.Settled);
         emit DisputeSettled(requestId, dispute.user);
     }
-
 
     function setSignatureExpiryTime(uint256 _expiryTime) external onlyOwner {
         signatureExpiryTime = _expiryTime;
