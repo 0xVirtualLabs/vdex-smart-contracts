@@ -1,4 +1,5 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
+import vaultProxyModule from "./Proxy";
 
 /**
  * This is the first module that will be run. It deploys the proxy and the
@@ -6,19 +7,22 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
  */
 const proxyModule = buildModule("ProxyModule", (m) => {
 
+  const { proxyAdmin } = m.useModule(vaultProxyModule);
+
   const proxyAdminOwner = m.getAccount(0);
   console.log("🚀 ~ proxyModule ~ proxyAdminOwner:", proxyAdminOwner)
-
-  const proxyAdmin = m.contract("ProxyAdmin", []);
+  const { vault } = m.useModule(vaultProxyModule);
   const lpProvider = m.contract("LpProvider", []);
-
-  const initializeData = m.encodeFunctionCall(lpProvider, "initialize", [proxyAdminOwner, "0xD58665b52a350a7bc4520af17A5EE8d95Cb45545", "0x9fC9921A09006C29D1b0aa1A3C759F776E6b21A2", 0,0, 345600, proxyAdminOwner]);
+  
+  const initializeData = m.encodeFunctionCall(lpProvider, "initialize", [proxyAdminOwner, vault, "0x131918bC49Bb7de74aC7e19d61A01544242dAA80", 0,0, 345600, proxyAdminOwner]);
 
   const proxy = m.contract("TransparentUpgradeableProxy", [
     lpProvider,
     proxyAdmin,
     initializeData,
-  ]);
+  ], {
+    id: "TProxyForLPProvider",
+  });
 
   // Return the proxy and proxy admin so that they can be used by other modules.
   return { proxyAdmin, proxy };

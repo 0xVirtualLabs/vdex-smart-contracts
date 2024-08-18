@@ -36,8 +36,6 @@ contract Vault is
     mapping(address => address) public combinedPublicKey;
     mapping(address => bool) public isTokenSupported;
     uint256 constant ONE = 1e9;
-    address public supraStorageOracle;
-    address public supraVerifier;
     // for adding LP
     mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
     address public lpProvider;
@@ -142,16 +140,12 @@ contract Vault is
         address _owner,
         uint256 _signatureExpiryTime,
         address _lpProvider,
-        address _dexSupporter,
-        address _supraStorageOracle,
-        address _supraVerifier
+        address _dexSupporter
     ) public initializer {
         OwnableUpgradeable.__Ownable_init(_owner);
         __Pausable_init();
         signatureExpiryTime = _signatureExpiryTime;
         lpProvider = _lpProvider;
-        supraStorageOracle = _supraStorageOracle;
-        supraVerifier = _supraVerifier;
         dexSupporter = _dexSupporter;
     }
 
@@ -200,10 +194,6 @@ contract Vault is
         emit Withdrawn(msg.sender, schnorrData.token, schnorrData.amount);
     }
 
-    function setOracle(address _supraStorageOracle) external onlyOwner {
-        supraStorageOracle = _supraStorageOracle;
-    }
-
     function setSupportedToken(
         address token,
         bool isSupported
@@ -220,11 +210,19 @@ contract Vault is
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
         Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
-            _schnorr,
-            combinedPublicKey[msg.sender]
+            _schnorr
         );
 
         if (schnorrData.addr != msg.sender) {
+            revert InvalidSchnorrSignature();
+        }
+
+        if (
+            !Crypto._verifySchnorrSignature(
+                _schnorr,
+                combinedPublicKey[schnorrData.addr]
+            )
+        ) {
             revert InvalidSchnorrSignature();
         }
 
@@ -297,8 +295,7 @@ contract Vault is
     ) external nonReentrant whenNotPaused {
         Dispute storage dispute = _disputes[requestId];
         Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
-            _schnorr,
-            combinedPublicKey[msg.sender]
+            _schnorr
         );
         require(
             dispute.status == uint8(DisputeStatus.Opened),
@@ -568,6 +565,14 @@ contract Vault is
 
     function setSignatureExpiryTime(uint256 _expiryTime) external onlyOwner {
         signatureExpiryTime = _expiryTime;
+    }
+
+    function setDexSupporter(address _dexSupporter) external onlyOwner {
+        dexSupporter = _dexSupporter;
+    }
+
+    function setLpProvider(address _lpProvider) external onlyOwner {
+        lpProvider = _lpProvider;
     }
 
     function setCombinedPublicKey(
