@@ -292,7 +292,7 @@ contract DexSupporter is Ownable {
         for (uint i = 0; i < len; i++) {
             address assetId = data.balances[i].addr;
             uint256 depositedAmount = vault.depositedAmount(
-                msg.sender,
+                data.addr,
                 assetId
             );
             uint256 loss = 0;
