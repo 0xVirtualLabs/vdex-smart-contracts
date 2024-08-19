@@ -35,8 +35,9 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     mapping(address => uint256) public fundAmount; // Total token amount for each token
     mapping(address => uint256) public totalNAVs; // Total NAVs for each token (10^18 decimals)
     mapping(address => mapping(address => uint256)) public userNAVs; // NAVs for each user and token (10^18 decimals)
-    mapping(address => uint256) public navPrices; // NAV price in USD for each token (10^18 decimals)
     mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // Withdrawal requests for each user and token
+
+    uint256 public navPrice; // Used for precision in calculations
 
     // Structs
     struct ReqWithdraw {
@@ -135,11 +136,11 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
                 (usdAmount * (10 ** (NAV_DECIMALS - oraclePrice.decimals))) /
-                navPrices[token];
+                navPrice;
         } else {
             return
                 (usdAmount / (10 ** (oraclePrice.decimals - NAV_DECIMALS))) /
-                navPrices[token];
+                navPrice;
         }
     }
 
@@ -156,12 +157,12 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(pairId[token]);
         if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
-                ((navAmount * navPrices[token]) /
+                ((navAmount * navPrice) /
                     (10 ** (NAV_DECIMALS - oraclePrice.decimals))) /
                 oraclePrice.price;
         } else {
             return
-                ((navAmount * navPrices[token]) *
+                ((navAmount * navPrice) *
                     (10 ** (oraclePrice.decimals - NAV_DECIMALS))) /
                 oraclePrice.price;
         }
@@ -180,8 +181,8 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             IERC20(token).transferFrom(msg.sender, coldWallet, amount),
             "Transfer failed"
         );
-        if (navPrices[token] == 0) {
-            navPrices[token] = 1 * (10 ** NAV_DECIMALS); // Set initial NAV price to 1 for first time
+        if (navPrice == 0) {
+            navPrice = 1 * (10 ** NAV_DECIMALS); // Set initial NAV price to 1 for first time
         }
 
         uint256 navs = _calcNAVAmount(token, amount);
@@ -355,26 +356,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param token The address of the token
      * @param newPrice The new NAV price
      */
-    function setNAVPrice(address token, uint256 newPrice) external onlyOwner {
+    function setNAVPrice(uint256 newPrice) external onlyOwner {
         require(newPrice > 0, "Invalid NAV price");
-        navPrices[token] = newPrice;
+        navPrice = newPrice;
         emit NAVPriceUpdated(token, newPrice);
-    }
-
-    /**
-     * @dev Sets the NAV prices for multiple tokens
-     * @param tokens Array of token addresses
-     * @param prices Array of NAV prices
-     */
-    function setNAVPrices(
-        address[] calldata tokens,
-        uint256[] calldata prices
-    ) external onlyOwner {
-        require(tokens.length == prices.length, "Invalid input");
-        for (uint256 i = 0; i < tokens.length; i++) {
-            navPrices[tokens[i]] = prices[i];
-            emit NAVPriceUpdated(tokens[i], prices[i]);
-        }
     }
 
     /**
