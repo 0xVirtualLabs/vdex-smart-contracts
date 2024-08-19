@@ -9,7 +9,9 @@ import {ISupraVerifier} from "./interfaces/ISupraVerifier.sol";
 import {IOracle} from "./interfaces/IOracle.sol";
 import {ILpProvider} from "./interfaces/ILpProvider.sol";
 
-contract DexSupporter {
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract DexSupporter is Ownable {
     error InvalidSchnorrSignature();
 
     IVault public vault;
@@ -205,7 +207,7 @@ contract DexSupporter {
         for (uint256 i = 0; i < balances.length; i++) {
             address token = balances[i].addr;
             uint256 amount = updatedBalances[i];
-            uint256 depositedAmount = vault.getDepositedAmount(
+            uint256 depositedAmount = vault.depositedAmount(
                 disputeUser,
                 token
             );
@@ -231,12 +233,18 @@ contract DexSupporter {
         address user,
         Crypto.SchnorrSignature calldata _schnorr
     ) external {
-        Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(
-            _schnorr,
-            vault.combinedPublicKey(user)
-        );
+        Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(_schnorr);
 
         if (data.addr != user) {
+            revert InvalidSchnorrSignature();
+        }
+
+        if (
+            !Crypto._verifySchnorrSignature(
+                _schnorr,
+                IVault(vault).combinedPublicKey(data.addr)
+            )
+        ) {
             revert InvalidSchnorrSignature();
         }
 
@@ -283,8 +291,8 @@ contract DexSupporter {
         // Calculate realized loss
         for (uint i = 0; i < len; i++) {
             address assetId = data.balances[i].addr;
-            uint256 depositedAmount = vault.getDepositedAmount(
-                msg.sender,
+            uint256 depositedAmount = vault.depositedAmount(
+                data.addr,
                 assetId
             );
             uint256 loss = 0;
@@ -298,7 +306,7 @@ contract DexSupporter {
 
         // Update the Vault and LpProvider
         vault.updatePartialLiquidation(
-            msg.sender,
+            data.addr,
             tokens,
             losses,
             totalLossCount
@@ -317,5 +325,9 @@ contract DexSupporter {
             )
         );
         require(status, "Data not verified");
+    }
+
+    function setVault(address _vault) external onlyOwner {
+        vault = IVault(_vault);
     }
 }

@@ -1,9 +1,8 @@
 {
-  "OnlyVaultModule#Crypto": "0x2d188636A433Dc42c82577C28BF058cD4A9eEAa9",
-  "OnlyVaultModule#Vault": "0xD58665b52a350a7bc4520af17A5EE8d95Cb45545",
-  "MockOracleModule#MockOracle": "0x9fC9921A09006C29D1b0aa1A3C759F776E6b21A2",
-  "ProxyModule#LpProvider": "0x04fae9dDA1018f317FA6Bc008C5b91CB24297ee9",
-  "ProxyModule#ProxyAdmin": "0x9E4b598190122A9CeFB55AC922C008F057d2FA96",
-  "ProxyModule#TransparentUpgradeableProxy": "0xf4720c47854936065b05993B693f7Eed8c3097c8",
-  "LpProviderModule#LpProvider": "0xf4720c47854936065b05993B693f7Eed8c3097c8"
+  "DexSupporterModule#Crypto": "0x4Bc997AC213C4e98668f0998a23f3b67888985f4",
+  "DexSupporterModule#Dex": "0x411f643208145F1c4bE71Fc8EBb1290C0295c0EE",
+  "DexSupporterModule#SupraOracleDecoder": "0xb707e2d577CDEDE9bA5968f5C2010665A6C5f5A7",
+  "DexSupporterModule#DexSupporter": "0x6fDdFb88d56151f4Bc40833014D1a6cC5666220F",
+  "OnlyVaultModule#Crypto": "0x39ab1d48A748BEe0AC8120d6348436091B80EF2a",
+  "OnlyVaultModule#Vault": "0xFa21E82AC378Dd8897225B67A4B91B74b32a82A4"
 }

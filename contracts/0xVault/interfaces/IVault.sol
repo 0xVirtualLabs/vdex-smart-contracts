@@ -37,7 +37,7 @@ interface IVault {
         uint32 requestId
     ) external view returns (Crypto.Balance[] memory);
 
-    function getDepositedAmount(
+    function depositedAmount(
         address user,
         address token
     ) external view returns (uint256);

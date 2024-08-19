@@ -131,12 +131,11 @@ library Crypto {
     }
 
     function decodeSchnorrData(
-        Crypto.SchnorrSignature calldata _schnorr,
-        address combinedPublicKey
+        Crypto.SchnorrSignature calldata _schnorr
     ) external pure returns (SchnorrData memory) {
-        if (!_verifySchnorrSignature(_schnorr, combinedPublicKey)) {
-            revert InvalidSchnorrSignature();
-        }
+        // if (!_verifySchnorrSignature(_schnorr, combinedPublicKey)) {
+        //     revert InvalidSchnorrSignature();
+        // }
         (
             uint32 signatureId,
             address addr,

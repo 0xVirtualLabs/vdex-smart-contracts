@@ -1,4 +1,6 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
+import LpProviderModule from "./LpProvider";
+import DexSupporterModule from "./DexSupporter";
 
 /**
  * This is the first module that will be run. It deploys the proxy and the
@@ -9,20 +11,39 @@ const proxyModule = buildModule("ProxyModule", (m) => {
   // so it will be the only account that can upgrade the proxy when needed.
 
   const proxyAdminOwner = m.getAccount(0);
-  console.log("🚀 ~ proxyModule ~ proxyAdminOwner:", proxyAdminOwner)
+  console.log("🚀 ~ proxyModule ~ proxyAdminOwner:", proxyAdminOwner);
 
+  const proxyAdmin = m.contract("ProxyAdmin", []);
   // This is our contract that will be proxied.
   // We will upgrade this contract with a new version later.
-  const proxyAdmin = m.contract("ProxyAdmin", []);
   const crypto = m.library("Crypto");
-  const dex = m.library("Dex");
-  const supraOracleDecoder = m.library("SupraOracleDecoder");
+  // const dex = m.library("Dex");
+  // const supraOracleDecoder = m.library("SupraOracleDecoder");
 
+  const vault = m.contract("Vault", [], {
+    libraries: {
+      Crypto: crypto,
+      // Dex: dex,
+      // SupraOracleDecoder: supraOracleDecoder,
+    },
+  });
 
   // The TransparentUpgradeableProxy contract creates the ProxyAdmin within its constructor.
   // To read more about how this proxy is implemented, you can view the source code and comments here:
   // https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.0.1/contracts/proxy/transparent/TransparentUpgradeableProxy.sol
-  const initializeData = m.encodeFunctionCall(vault, "initialize", [proxyAdminOwner, proxyAdminOwner, 1000000000]);
+  const initializeData = m.encodeFunctionCall(
+    vault,
+    "initialize",
+    [
+      proxyAdminOwner,
+      3600,
+      proxyAdminOwner,
+      proxyAdminOwner,
+    ],
+    {
+      id: "TProxyForVault",
+    }
+  );
 
   const proxy = m.contract("TransparentUpgradeableProxy", [
     vault,
