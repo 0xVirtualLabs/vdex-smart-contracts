@@ -515,6 +515,7 @@ contract Vault is
             depositedAmount[user][token] -= loss;
 
             // Transfer realized loss to insurance pool
+            IERC20(token).transfer(lpProvider, loss);
             ILpProvider(lpProvider).increaseLpProvidedAmount(token, loss);
 
             emit PartialLiquidation(user, token, loss);

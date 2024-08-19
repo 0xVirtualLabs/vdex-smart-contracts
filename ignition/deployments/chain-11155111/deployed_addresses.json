@@ -1,6 +1,8 @@
 {
-  "DexSupporterModule#Crypto": "0x6eee3F199F33d46a9425F65839077e4121FaDa8D",
-  "DexSupporterModule#Dex": "0xc22104143f0CDc550df32F7A4212c584d8d52E58",
-  "DexSupporterModule#SupraOracleDecoder": "0xE3c7eF69D43fabC30cfA53769CAbfCc57566A2F9",
-  "DexSupporterModule#DexSupporter": "0x6aa2Fe1ef41cF99DF097c9AD08550b89a6B8876F"
+  "DexSupporterModule#Crypto": "0x4Bc997AC213C4e98668f0998a23f3b67888985f4",
+  "DexSupporterModule#Dex": "0x411f643208145F1c4bE71Fc8EBb1290C0295c0EE",
+  "DexSupporterModule#SupraOracleDecoder": "0xb707e2d577CDEDE9bA5968f5C2010665A6C5f5A7",
+  "DexSupporterModule#DexSupporter": "0x6fDdFb88d56151f4Bc40833014D1a6cC5666220F",
+  "OnlyVaultModule#Crypto": "0x39ab1d48A748BEe0AC8120d6348436091B80EF2a",
+  "OnlyVaultModule#Vault": "0xFa21E82AC378Dd8897225B67A4B91B74b32a82A4"
 }
