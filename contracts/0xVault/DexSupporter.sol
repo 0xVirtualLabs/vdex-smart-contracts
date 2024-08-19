@@ -306,7 +306,7 @@ contract DexSupporter is Ownable {
 
         // Update the Vault and LpProvider
         vault.updatePartialLiquidation(
-            msg.sender,
+            data.addr,
             tokens,
             losses,
             totalLossCount
