@@ -84,7 +84,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     );
     event WithdrawalDelayTimeChanged(uint256 newWithdrawalDelayTime);
     event RewardDepositedForMarketMaker(address indexed token, uint256 amount);
-    event NAVPriceUpdated(address indexed token, uint256 newPrice);
+    event NAVPriceUpdated(uint256 newPrice);
 
     // Modifiers
     modifier onlyVault() {
@@ -353,13 +353,12 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /**
      * @dev Updates the NAV price for a token
-     * @param token The address of the token
      * @param newPrice The new NAV price
      */
     function setNAVPrice(uint256 newPrice) external onlyOwner {
         require(newPrice > 0, "Invalid NAV price");
         navPrice = newPrice;
-        emit NAVPriceUpdated(token, newPrice);
+        emit NAVPriceUpdated(newPrice);
     }
 
     /**
