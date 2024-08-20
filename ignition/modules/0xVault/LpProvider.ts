@@ -6,23 +6,30 @@ import vaultProxyModule from "./Proxy";
  * proxy admin, and returns them so that they can be used by other modules.
  */
 const proxyModule = buildModule("ProxyModule", (m) => {
-
   const { proxyAdmin } = m.useModule(vaultProxyModule);
 
   const proxyAdminOwner = m.getAccount(0);
-  console.log("🚀 ~ proxyModule ~ proxyAdminOwner:", proxyAdminOwner)
+  console.log("🚀 ~ proxyModule ~ proxyAdminOwner:", proxyAdminOwner);
   const { vault } = m.useModule(vaultProxyModule);
   const lpProvider = m.contract("LpProvider", []);
-  
-  const initializeData = m.encodeFunctionCall(lpProvider, "initialize", [proxyAdminOwner, vault, "0x131918bC49Bb7de74aC7e19d61A01544242dAA80", 0,0, 345600, proxyAdminOwner]);
 
-  const proxy = m.contract("TransparentUpgradeableProxy", [
-    lpProvider,
-    proxyAdmin,
-    initializeData,
-  ], {
-    id: "TProxyForLPProvider",
-  });
+  const initializeData = m.encodeFunctionCall(lpProvider, "initialize", [
+    proxyAdminOwner,
+    vault,
+    "0x33Ac5E3C266AF17C25921e0A26DCb816d00a3657", // TODO: supra storage address - change it when deploy
+    0,
+    0,
+    345600,
+    proxyAdminOwner,
+  ]);
+
+  const proxy = m.contract(
+    "TransparentUpgradeableProxy",
+    [lpProvider, proxyAdmin, initializeData],
+    {
+      id: "TProxyForLPProvider",
+    }
+  );
 
   // Return the proxy and proxy admin so that they can be used by other modules.
   return { proxyAdmin, proxy };
