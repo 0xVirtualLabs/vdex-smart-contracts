@@ -16,13 +16,21 @@ const DexSupporterModule = buildModule("DexSupporterModule", (m) => {
   const Dex = m.library("Dex");
   const Crypto = m.library("Crypto");
   const SupraOracleDecoder = m.library("SupraOracleDecoder");
+  const supraStorge = process.env.SUPRA_STORAGE_ADDRESS;
+  if (!supraStorge) {
+    throw new Error("Please set your SUPRA_STORAGE_ADDRESS in a .env file");
+  }
+  const supraVerifier = process.env.SUPRA_VERITIFER_ADDRESS;
+  if (!supraVerifier) {
+    throw new Error("Please set your SUPRA_VERITIFER_ADDRESS in a .env file");
+  }
 
   const dexSupporter = m.contract(
     "DexSupporter",
     [
       vault,
-      "0xaa2f56843cec7840f0c106f0202313d8d8cb13d6", // TODO: supra verifier address - change it when deploy
-      "0x33Ac5E3C266AF17C25921e0A26DCb816d00a3657", // TODO: supra storage address - change it when deploy 
+      supraVerifier, // TODO: supra verifier address - change it when deploy
+      supraStorge, // TODO: supra storage address - change it when deploy 
       lpProvider,
     ],
     {

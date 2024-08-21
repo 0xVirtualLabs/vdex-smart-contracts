@@ -13,10 +13,15 @@ const proxyModule = buildModule("ProxyModule", (m) => {
   const { vault } = m.useModule(vaultProxyModule);
   const lpProvider = m.contract("LpProvider", []);
 
+  const supraStorge = process.env.SUPRA_STORAGE_ADDRESS;
+  if (!supraStorge) {
+    throw new Error("Please set your SUPRA_STORAGE_ADDRESS in a .env file");
+  }
+
   const initializeData = m.encodeFunctionCall(lpProvider, "initialize", [
     proxyAdminOwner,
     vault,
-    "0x33Ac5E3C266AF17C25921e0A26DCb816d00a3657", // TODO: supra storage address - change it when deploy
+    supraStorge, // TODO: supra storage address - change it when deploy
     0,
     0,
     345600,

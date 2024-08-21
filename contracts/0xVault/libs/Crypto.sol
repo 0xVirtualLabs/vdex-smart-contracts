@@ -12,6 +12,7 @@ library Crypto {
     error InvalidAddress();
     error DisputeChallengeFailed();
     error SettleDisputeFailed();
+    error InvalidChainId();
 
     struct TokenBalance {
         address token;
@@ -42,6 +43,7 @@ library Crypto {
         address token;
         uint256 amount;
         uint64 timestamp;
+        uint256 chainId;
     }
 
     // for liquidation case
@@ -95,6 +97,7 @@ library Crypto {
         Position[] positions;
         string sigType;
         uint256 timestamp;
+        uint256 chainId;
     }
 
     struct ClosePositionSchnorrData {
@@ -132,7 +135,7 @@ library Crypto {
 
     function decodeSchnorrData(
         Crypto.SchnorrSignature calldata _schnorr
-    ) external pure returns (SchnorrData memory) {
+    ) external view returns (SchnorrData memory) {
         // if (!_verifySchnorrSignature(_schnorr, combinedPublicKey)) {
         //     revert InvalidSchnorrSignature();
         // }
@@ -142,11 +145,15 @@ library Crypto {
             Balance[] memory balances,
             Position[] memory positions,
             string memory sigType,
-            uint256 timestamp
+            uint256 timestamp,
+            uint256 chainId
         ) = abi.decode(
                 _schnorr.data,
-                (uint32, address, Balance[], Position[], string, uint256)
+                (uint32, address, Balance[], Position[], string, uint256, uint256)
             );
+        if (chainId != block.chainid) {
+            revert InvalidChainId();
+        }
         return
             SchnorrData(
                 signatureId,
@@ -154,20 +161,24 @@ library Crypto {
                 balances,
                 positions,
                 sigType,
-                timestamp
+                timestamp,
+                chainId
             );
     }
 
     function decodeSchnorrDataWithdraw(
         Crypto.SchnorrSignature calldata _schnorr,
         address combinedPublicKey
-    ) external pure returns (SchnorrDataWithdraw memory) {
+    ) external view returns (SchnorrDataWithdraw memory) {
         if (!_verifySchnorrSignature(_schnorr, combinedPublicKey)) {
             revert InvalidSchnorrSignature();
         }
-        (address trader, address token, uint256 amount, uint64 timestamp) = abi
-            .decode(_schnorr.data, (address, address, uint256, uint64));
-        return SchnorrDataWithdraw(trader, token, amount, timestamp);
+        (address trader, address token, uint256 amount, uint64 timestamp, uint256 chainId) = abi
+            .decode(_schnorr.data, (address, address, uint256, uint64, uint256));
+        if (chainId != block.chainid) {
+            revert InvalidChainId();
+        }
+        return SchnorrDataWithdraw(trader, token, amount, timestamp, chainId);
     }
 
     //  /**
