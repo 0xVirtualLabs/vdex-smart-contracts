@@ -28,6 +28,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public epochPeriod; // Duration of each epoch
     uint256 public withdrawalDelayTime; // Delay time for withdrawals
     mapping(address => uint256) public pairId; // token => pairId
+    mapping(address => bool) public isTokenSupported;
 
     // Mappings
     mapping(address => bool) public isLPProvider; // Tracks whether an address is an LP provider
@@ -85,6 +86,9 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     event WithdrawalDelayTimeChanged(uint256 newWithdrawalDelayTime);
     event RewardDepositedForMarketMaker(address indexed token, uint256 amount);
     event NAVPriceUpdated(uint256 newPrice);
+
+    event TokenAdded(address indexed token);
+    event TokenRemoved(address indexed token);
 
     // Modifiers
     modifier onlyVault() {
@@ -175,7 +179,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      */
     function _depositFund(address token, uint256 amount) private {
         require(amount > 0, "Amount must be greater than zero");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
+        require(isTokenSupported[token], "Token not supported");
 
         require(
             IERC20(token).transferFrom(msg.sender, coldWallet, amount),
@@ -276,7 +280,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     ) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
         require(amount > 0, "Amount must be greater than zero");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
+        require(isTokenSupported[token], "Token not supported");
 
         require(
             IERC20(token).transferFrom(msg.sender, address(this), amount),
@@ -293,7 +297,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      */
     function withdrawAllLiquidity(address token) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
+        require(isTokenSupported[token], "Token not supported");
         uint256 amount = lpProvidedAmount[token];
         require(amount > 0, "No liquidity to withdraw");
         require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
@@ -334,6 +338,23 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     // Owner-only functions
+
+    /**
+     * 
+     * @param token address of the token
+     * @param isSupported boolean value indicating whether the token is supported
+     */
+    function setSupportedToken(
+        address token,
+        bool isSupported
+    ) external onlyOwner {
+        isTokenSupported[token] = isSupported;
+        if (isSupported) {
+            emit TokenAdded(token);
+        } else {
+            emit TokenRemoved(token);
+        }
+    }
 
     /**
      * @dev Sets the LP provider status for multiple addresses
@@ -436,7 +457,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 amount
     ) external onlyOwner {
         require(amount > 0, "Amount must be greater than zero");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
+        require(isTokenSupported[token], "Token not supported");
 
         require(
             IERC20(token).transferFrom(msg.sender, address(this), amount),

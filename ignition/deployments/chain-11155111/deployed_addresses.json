@@ -1,14 +1,14 @@
 {
-  "ProxyModule#Crypto": "0x9399290711765E9081D502C0ae9172223A8fc593",
-  "ProxyModule#ProxyAdmin": "0x0976C85d7692110e8D091EFd51c532Bc7A071bDC",
-  "ProxyModule#Vault": "0xa03f6B064af19c1948045a9C2B73A926C287eEE0",
-  "ProxyModule#TransparentUpgradeableProxy": "0x54B58013420a37685E545eA1C5743534cb4FB745",
-  "VaultProxyModule#Vault": "0x54B58013420a37685E545eA1C5743534cb4FB745",
-  "ProxyModule#LpProvider": "0xcc5A5a2eD7F78228D4004Ab3b6Aab3C3Cbe766Db",
-  "ProxyModule#TProxyForLPProvider": "0x10c460B496a6348f60c998ca04d86B8860371E6C",
-  "LpProviderModule#LpProvider": "0x10c460B496a6348f60c998ca04d86B8860371E6C",
-  "DexSupporterModule#Crypto": "0xDEb5541160612A6893e2492f790272c67acdD1eB",
-  "DexSupporterModule#Dex": "0x4dCf44fF2a7AaB0Ff900B3710CDa064A702eB215",
-  "DexSupporterModule#SupraOracleDecoder": "0x8998aa0ACD83511feD4EfD5c2f14D0083E30C434",
-  "DexSupporterModule#DexSupporter": "0x4989159E5401F3848872Cb980c6636CeCA29A383"
+  "ProxyModule#Crypto": "0xAfc39020624f5Dae91B555Ee6F544576755C6D92",
+  "ProxyModule#ProxyAdmin": "0xb0396b200e4702b041D66c96C8691E1eC84B3c1e",
+  "ProxyModule#Vault": "0xdCe0ff6C6ece5c7ab4B37253eA453231b070e1Ba",
+  "ProxyModule#TransparentUpgradeableProxy": "0xE6495b635D4c4EE1A1BD7878BBe837CF0800bE93",
+  "VaultProxyModule#Vault": "0xE6495b635D4c4EE1A1BD7878BBe837CF0800bE93",
+  "ProxyModule#LpProvider": "0x93E983e12E833D736733FBECc4Beb17bC3e30bDE",
+  "ProxyModule#TProxyForLPProvider": "0x1c0B3ec2C00D9e4eFb634734f5Eb0483EE5AE5d8",
+  "LpProviderModule#LpProvider": "0x1c0B3ec2C00D9e4eFb634734f5Eb0483EE5AE5d8",
+  "DexSupporterModule#Crypto": "0x5ff8a613F67A085d576a461CDF5aC121928048A4",
+  "DexSupporterModule#Dex": "0xfF522d6E1509a734CfCa0deDf398343A9f06046f",
+  "DexSupporterModule#SupraOracleDecoder": "0xc5641b14EC29A38ceB9bBD853E75E99C158c652F",
+  "DexSupporterModule#DexSupporter": "0x5741caC9Fa100B58e05cC4f16F1B6CaDEF91F45A"
 }
