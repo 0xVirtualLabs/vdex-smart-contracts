@@ -40,6 +40,7 @@ contract Vault is
     mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
     address public lpProvider;
     address public dexSupporter;
+    // uint256 public lastPausedTime;
 
     struct TokenBalance {
         address token;
@@ -513,4 +514,14 @@ contract Vault is
     ) external onlyOwner {
         combinedPublicKey[_user] = _combinedPublicKey;
     }
+
+    // function pause() external onlyOwner {
+    //     require(block.timestamp - lastPausedTime > 1 days, "Pause too frequent"); 
+    //     _pause();
+    // }
+
+    // function unpause() external onlyOwner {
+    //     _unpause();
+    //     lastPausedTime = block.timestamp;
+    // }
 }
