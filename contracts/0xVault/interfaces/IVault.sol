@@ -13,8 +13,6 @@ interface IVault {
         uint32 sessionId;
     }
 
-    function isTokenSupported(address token) external view returns (bool);
-
     function updateLiquidatedPositions(
         uint32 requestId,
         uint256[] memory liquidatedIndexes,

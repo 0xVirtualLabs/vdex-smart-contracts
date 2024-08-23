@@ -6,23 +6,35 @@ import vaultProxyModule from "./Proxy";
  * proxy admin, and returns them so that they can be used by other modules.
  */
 const proxyModule = buildModule("ProxyModule", (m) => {
-
   const { proxyAdmin } = m.useModule(vaultProxyModule);
 
   const proxyAdminOwner = m.getAccount(0);
-  console.log("🚀 ~ proxyModule ~ proxyAdminOwner:", proxyAdminOwner)
+  console.log("🚀 ~ proxyModule ~ proxyAdminOwner:", proxyAdminOwner);
   const { vault } = m.useModule(vaultProxyModule);
   const lpProvider = m.contract("LpProvider", []);
-  
-  const initializeData = m.encodeFunctionCall(lpProvider, "initialize", [proxyAdminOwner, vault, "0x131918bC49Bb7de74aC7e19d61A01544242dAA80", 0,0, 345600, proxyAdminOwner]);
 
-  const proxy = m.contract("TransparentUpgradeableProxy", [
-    lpProvider,
-    proxyAdmin,
-    initializeData,
-  ], {
-    id: "TProxyForLPProvider",
-  });
+  const supraStorge = process.env.SUPRA_STORAGE_ADDRESS;
+  if (!supraStorge) {
+    throw new Error("Please set your SUPRA_STORAGE_ADDRESS in a .env file");
+  }
+
+  const initializeData = m.encodeFunctionCall(lpProvider, "initialize", [
+    proxyAdminOwner,
+    vault,
+    supraStorge, // TODO: supra storage address - change it when deploy
+    0,
+    0,
+    345600,
+    proxyAdminOwner,
+  ]);
+
+  const proxy = m.contract(
+    "TransparentUpgradeableProxy",
+    [lpProvider, proxyAdmin, initializeData],
+    {
+      id: "TProxyForLPProvider",
+    }
+  );
 
   // Return the proxy and proxy admin so that they can be used by other modules.
   return { proxyAdmin, proxy };

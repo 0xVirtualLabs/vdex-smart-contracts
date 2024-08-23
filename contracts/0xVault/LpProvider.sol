@@ -28,6 +28,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public epochPeriod; // Duration of each epoch
     uint256 public withdrawalDelayTime; // Delay time for withdrawals
     mapping(address => uint256) public pairId; // token => pairId
+    mapping(address => bool) public isTokenSupported;
 
     // Mappings
     mapping(address => bool) public isLPProvider; // Tracks whether an address is an LP provider
@@ -35,8 +36,9 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     mapping(address => uint256) public fundAmount; // Total token amount for each token
     mapping(address => uint256) public totalNAVs; // Total NAVs for each token (10^18 decimals)
     mapping(address => mapping(address => uint256)) public userNAVs; // NAVs for each user and token (10^18 decimals)
-    mapping(address => uint256) public navPrices; // NAV price in USD for each token (10^18 decimals)
     mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // Withdrawal requests for each user and token
+
+    uint256 public navPrice; // Used for precision in calculations
 
     // Structs
     struct ReqWithdraw {
@@ -83,7 +85,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     );
     event WithdrawalDelayTimeChanged(uint256 newWithdrawalDelayTime);
     event RewardDepositedForMarketMaker(address indexed token, uint256 amount);
-    event NAVPriceUpdated(address indexed token, uint256 newPrice);
+    event NAVPriceUpdated(uint256 newPrice);
+
+    event TokenAdded(address indexed token);
+    event TokenRemoved(address indexed token);
 
     // Modifiers
     modifier onlyVault() {
@@ -135,11 +140,11 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
                 (usdAmount * (10 ** (NAV_DECIMALS - oraclePrice.decimals))) /
-                navPrices[token];
+                navPrice;
         } else {
             return
                 (usdAmount / (10 ** (oraclePrice.decimals - NAV_DECIMALS))) /
-                navPrices[token];
+                navPrice;
         }
     }
 
@@ -156,12 +161,12 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(pairId[token]);
         if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
-                ((navAmount * navPrices[token]) /
+                ((navAmount * navPrice) /
                     (10 ** (NAV_DECIMALS - oraclePrice.decimals))) /
                 oraclePrice.price;
         } else {
             return
-                ((navAmount * navPrices[token]) *
+                ((navAmount * navPrice) *
                     (10 ** (oraclePrice.decimals - NAV_DECIMALS))) /
                 oraclePrice.price;
         }
@@ -174,14 +179,14 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      */
     function _depositFund(address token, uint256 amount) private {
         require(amount > 0, "Amount must be greater than zero");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
+        require(isTokenSupported[token], "Token not supported");
 
         require(
             IERC20(token).transferFrom(msg.sender, coldWallet, amount),
             "Transfer failed"
         );
-        if (navPrices[token] == 0) {
-            navPrices[token] = 1 * (10 ** NAV_DECIMALS); // Set initial NAV price to 1 for first time
+        if (navPrice == 0) {
+            navPrice = 1 * (10 ** NAV_DECIMALS); // Set initial NAV price to 1 for first time
         }
 
         uint256 navs = _calcNAVAmount(token, amount);
@@ -275,7 +280,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     ) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
         require(amount > 0, "Amount must be greater than zero");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
+        require(isTokenSupported[token], "Token not supported");
 
         require(
             IERC20(token).transferFrom(msg.sender, address(this), amount),
@@ -292,7 +297,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      */
     function withdrawAllLiquidity(address token) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
+        require(isTokenSupported[token], "Token not supported");
         uint256 amount = lpProvidedAmount[token];
         require(amount > 0, "No liquidity to withdraw");
         require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
@@ -335,6 +340,23 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     // Owner-only functions
 
     /**
+     * 
+     * @param token address of the token
+     * @param isSupported boolean value indicating whether the token is supported
+     */
+    function setSupportedToken(
+        address token,
+        bool isSupported
+    ) external onlyOwner {
+        isTokenSupported[token] = isSupported;
+        if (isSupported) {
+            emit TokenAdded(token);
+        } else {
+            emit TokenRemoved(token);
+        }
+    }
+
+    /**
      * @dev Sets the LP provider status for multiple addresses
      * @param lpProvider Array of LP provider addresses
      * @param isProvider Array of boolean values indicating LP provider status
@@ -352,29 +374,12 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /**
      * @dev Updates the NAV price for a token
-     * @param token The address of the token
      * @param newPrice The new NAV price
      */
-    function setNAVPrice(address token, uint256 newPrice) external onlyOwner {
+    function setNAVPrice(uint256 newPrice) external onlyOwner {
         require(newPrice > 0, "Invalid NAV price");
-        navPrices[token] = newPrice;
-        emit NAVPriceUpdated(token, newPrice);
-    }
-
-    /**
-     * @dev Sets the NAV prices for multiple tokens
-     * @param tokens Array of token addresses
-     * @param prices Array of NAV prices
-     */
-    function setNAVPrices(
-        address[] calldata tokens,
-        uint256[] calldata prices
-    ) external onlyOwner {
-        require(tokens.length == prices.length, "Invalid input");
-        for (uint256 i = 0; i < tokens.length; i++) {
-            navPrices[tokens[i]] = prices[i];
-            emit NAVPriceUpdated(tokens[i], prices[i]);
-        }
+        navPrice = newPrice;
+        emit NAVPriceUpdated(newPrice);
     }
 
     /**
@@ -452,7 +457,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 amount
     ) external onlyOwner {
         require(amount > 0, "Amount must be greater than zero");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
+        require(isTokenSupported[token], "Token not supported");
 
         require(
             IERC20(token).transferFrom(msg.sender, address(this), amount),

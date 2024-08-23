@@ -34,7 +34,6 @@ contract Vault is
     mapping(uint32 => uint32) private _latestSchnorrSignatureId;
 
     mapping(address => address) public combinedPublicKey;
-    mapping(address => bool) public isTokenSupported;
     uint256 constant ONE = 1e9;
     // for adding LP
     mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
@@ -63,8 +62,6 @@ contract Vault is
         uint256 amount,
         uint32 requestId
     );
-    event TokenAdded(address indexed token);
-    event TokenRemoved(address indexed token);
     event LPProvided(
         address indexed user,
         address indexed token,
@@ -155,7 +152,7 @@ contract Vault is
         uint256 amount
     ) external nonReentrant whenNotPaused {
         require(amount > 0, "Amount must be greater than zero");
-        require(isTokenSupported[token], "Token not supported");
+        require(ILpProvider(lpProvider).isTokenSupported(token), "Token not supported");
 
         require(
             IERC20(token).transferFrom(msg.sender, address(this), amount),
@@ -174,7 +171,7 @@ contract Vault is
             .decodeSchnorrDataWithdraw(_schnorr, combinedPublicKey[msg.sender]);
 
         require(schnorrData.amount > 0, "Amount must byese greater than zero");
-        require(isTokenSupported[schnorrData.token], "Token not supported");
+        require(ILpProvider(lpProvider).isTokenSupported(schnorrData.token), "Token not supported");
 
         require(
             block.timestamp - schnorrData.timestamp < signatureExpiryTime,
@@ -193,18 +190,6 @@ contract Vault is
         );
 
         emit Withdrawn(msg.sender, schnorrData.token, schnorrData.amount);
-    }
-
-    function setSupportedToken(
-        address token,
-        bool isSupported
-    ) external onlyOwner {
-        isTokenSupported[token] = isSupported;
-        if (isSupported) {
-            emit TokenAdded(token);
-        } else {
-            emit TokenRemoved(token);
-        }
     }
 
     function withdrawAndClosePositionTrustlessly(
