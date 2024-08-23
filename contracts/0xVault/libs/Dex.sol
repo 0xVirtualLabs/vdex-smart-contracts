@@ -2,28 +2,38 @@
 pragma solidity =0.8.24;
 
 import {Crypto} from "./Crypto.sol";
-import {SupraOracleDecoder} from "./SupraOracleDecoder.sol";
+import {IPythOracle} from "../interfaces/IOracle.sol";
 
 library Dex {
     uint256 public constant MAINTENANCE_MARGIN_PERCENT = 50;
     uint256 public constant BACKSTOP_LIQUIDATION_PERCENT = 6667;
 
     function _getPriceByPairId(
-        SupraOracleDecoder.CommitteeFeed[] memory allFeeds,
-        uint256 pair
+        IPythOracle.PriceFeed[] memory allFeeds,
+        bytes32 pair
     ) public pure returns (uint128) {
         for (uint256 i = 0; i < allFeeds.length; i++) {
-            if (allFeeds[i].pair == pair) {
-                return allFeeds[i].price;
+            if (allFeeds[i].id == pair) {
+                int64 price = allFeeds[i].price.price;
+                // int32 expo = allFeeds[i].price.expo;
+
+                // Convert price to positive if it's negative
+                if (price < 0) {
+                    revert("Negative price");
+                }
+
+                // Adjust the price based on the exponent
+                // return uint128(uint64(price) * 10 ** uint32(expo));
+                return uint128(uint64(price));
             }
         }
 
-        revert("given pair not found");
+        revert("Given pair not found");
     }
 
     function _getPositionLoss(
         Crypto.Position memory position,
-        SupraOracleDecoder.CommitteeFeed[] memory allFeeds
+        IPythOracle.PriceFeed[] memory allFeeds
     ) public pure returns (uint256) {
         uint256 totalPositionValue = position.quantity *
             _getPriceByPairId(allFeeds, position.oracleId);
@@ -44,7 +54,7 @@ library Dex {
 
     function _checkLiquidatedPosition(
         Crypto.Position memory position,
-        SupraOracleDecoder.CommitteeFeed[] memory allFeeds,
+        IPythOracle.PriceFeed[] memory allFeeds,
         Crypto.Balance[] memory balances
     ) public pure returns (bool) {
         uint256 totalPositionLoss = 0;

@@ -426,73 +426,6 @@ contract Vault is
         }
     }
 
-    // function liquidatePartially(
-    //     address user,
-    //     Crypto.SchnorrSignature calldata _schnorr
-    // ) external onlyOwner {
-    //     Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(
-    //         _schnorr,
-    //         combinedPublicKey[user]
-    //     );
-
-    //     if (data.addr != user) {
-    //         revert InvalidSchnorrSignature();
-    //     }
-
-    //     // Initialize availableBalance
-    //     uint256 len = data.balances.length;
-    //     Crypto.Balance[] memory availableBalance = new Crypto.Balance[](len);
-    //     for (uint i = 0; i < len; i++) {
-    //         availableBalance[i] = Crypto.Balance(
-    //             data.balances[i].oracleId,
-    //             data.balances[i].addr,
-    //             0
-    //         );
-    //     }
-
-    //     // Calculate available balance from SchnorrData balances
-    //     for (uint i = 0; i < len; i++) {
-    //         for (uint j = 0; j < availableBalance.length; j++) {
-    //             if (data.balances[i].addr == availableBalance[j].addr) {
-    //                 availableBalance[j].balance += data.balances[i].balance;
-    //                 break;
-    //             }
-    //         }
-    //     }
-
-    //     // Add initial margins to available balance from SchnorrData positions
-    //     uint256 posLen = data.positions.length;
-    //     for (uint i = 0; i < posLen; i++) {
-    //         for (uint j = 0; j < data.positions[i].collaterals.length; j++) {
-    //             Crypto.Collateral memory im = data.positions[i].collaterals[j];
-    //             for (uint k = 0; k < availableBalance.length; k++) {
-    //                 if (im.token == availableBalance[k].addr) {
-    //                     availableBalance[k].balance += im.quantity;
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     // Initialize and calculate realized loss
-    //     for (uint i = 0; i < len; i++) {
-    //         address assetId = data.balances[i].addr;
-    //         uint256 loss = 0;
-    //         if (
-    //             depositedAmount[data.addr][assetId] >
-    //             availableBalance[i].balance
-    //         ) {
-    //             loss =
-    //                 depositedAmount[data.addr][assetId] -
-    //                 availableBalance[i].balance;
-    //         }
-    //         // Transfer realized loss to insurance pool
-    //         if (loss > 0) {
-    //             ILpProvider(lpProvider).increaseLpProvidedAmount(assetId, loss);
-    //         }
-    //     }
-    // }
-
     function updatePartialLiquidation(
         address user,
         address[] memory tokens,
@@ -564,15 +497,13 @@ contract Vault is
         emit DisputeSettled(requestId, dispute.user);
     }
 
-    function setSignatureExpiryTime(uint256 _expiryTime) external onlyOwner {
+    function setVaultParameters(
+        uint256 _expiryTime,
+        address _dexSupporter,
+        address _lpProvider
+    ) external onlyOwner {
         signatureExpiryTime = _expiryTime;
-    }
-
-    function setDexSupporter(address _dexSupporter) external onlyOwner {
         dexSupporter = _dexSupporter;
-    }
-
-    function setLpProvider(address _lpProvider) external onlyOwner {
         lpProvider = _lpProvider;
     }
 
