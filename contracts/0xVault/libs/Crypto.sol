@@ -55,13 +55,13 @@ library Crypto {
     }
 
     struct Balance {
-        uint256 oracleId;
+        bytes32 oracleId;
         address addr;
         uint256 balance;
     }
 
     struct Collateral {
-        uint256 oracleId;
+        bytes32 oracleId;
         address token;
         uint256 quantity;
         uint256 entryPrice;
@@ -69,7 +69,10 @@ library Crypto {
 
     struct LiquidatedPosition {
         string positionId;
-        bytes proofBytes;
+        bytes[] updateData;
+        bytes32[] priceIds;
+        uint64 minPublishTime;
+        uint64 maxPublishTime;
     }
 
     struct UpdateDispute {
@@ -79,7 +82,7 @@ library Crypto {
 
     struct Position {
         string positionId;
-        uint256 oracleId;
+        bytes32 oracleId;
         address token;
         uint256 quantity;
         uint256 leverageFactor;
