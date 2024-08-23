@@ -219,7 +219,7 @@ contract DexSupporter is Ownable {
         Crypto.Balance[] memory disputeBalances
     ) private returns (bool) {
         IPythOracle.PriceFeed[] memory feeds = IPythOracle(pythOracle)
-            .parsePriceFeedUpdates{value: msg.value}(
+            .parsePriceFeedUpdates(
             liquidatedPosition.updateData,
             liquidatedPosition.priceIds,
             liquidatedPosition.minPublishTime,
