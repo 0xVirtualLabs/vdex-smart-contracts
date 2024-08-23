@@ -31,6 +31,22 @@ library Dex {
         revert("Given pair not found");
     }
 
+    function _getPriceFeedByPairId(
+        IPythOracle.PriceFeed[] memory allFeeds,
+        bytes32 pair
+    ) public pure returns (IPythOracle.Price memory feed) {
+        for (uint256 i = 0; i < allFeeds.length; i++) {
+            if (allFeeds[i].id == pair) {
+                if (allFeeds[i].price.price < 0) {
+                    revert("Negative price");
+                }
+                return allFeeds[i].price;
+            }
+        }
+
+        revert("Given pair not found");
+    }
+
     function _getPositionLoss(
         Crypto.Position memory position,
         IPythOracle.PriceFeed[] memory allFeeds
@@ -65,9 +81,22 @@ library Dex {
 
         uint256 collateralCurrentValue = 0;
         for (uint256 j = 0; j < position.collaterals.length; j++) {
+            IPythOracle.Price memory feed = _getPriceFeedByPairId(
+                allFeeds,
+                position.collaterals[j].oracleId
+            );
+            uint256 u256Price = uint256(uint64(feed.price));
+            uint256 beAddedCollateralCurrentValue = position
+                .collaterals[j]
+                .quantity * u256Price;
+            if (feed.expo > 0) {
+                beAddedCollateralCurrentValue *= 10 ** uint32(feed.expo);
+            } else {
+                beAddedCollateralCurrentValue /= 10 ** uint32(-feed.expo);
+            }
             collateralCurrentValue +=
                 position.collaterals[j].quantity *
-                _getPriceByPairId(allFeeds, position.collaterals[j].oracleId);
+                u256Price;
             totalPositionInitialCollateral +=
                 position.collaterals[j].entryPrice *
                 position.collaterals[j].quantity;
@@ -83,9 +112,20 @@ library Dex {
             keccak256(abi.encodePacked("cross"))
         ) {
             for (uint256 i = 0; i < balances.length; i++) {
-                totalPositionInitialCollateral +=
+                IPythOracle.Price memory feed = _getPriceFeedByPairId(
+                    allFeeds,
+                    balances[i].oracleId
+                );
+                uint256 u256Price = uint256(uint64(feed.price));
+                uint256 beAddedTotalPositionInitialCollateral =
                     balances[i].balance *
-                    _getPriceByPairId(allFeeds, balances[i].oracleId);
+                    u256Price;
+                if (feed.expo > 0) {
+                    beAddedTotalPositionInitialCollateral *= 10 ** uint32(feed.expo);
+                } else {
+                    beAddedTotalPositionInitialCollateral /= 10 ** uint32(-feed.expo);
+                }
+                totalPositionInitialCollateral += beAddedTotalPositionInitialCollateral;
             }
         }
 
