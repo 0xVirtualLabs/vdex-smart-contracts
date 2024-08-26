@@ -8,9 +8,11 @@ import {IVault} from "./interfaces/IVault.sol";
 import {IOracle, IPythOracle} from "./interfaces/IOracle.sol";
 import {ILpProvider} from "./interfaces/ILpProvider.sol";
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
-contract DexSupporter is Ownable {
+contract DexSupporter is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     error InvalidSchnorrSignature();
 
     IVault public vault;
@@ -26,10 +28,28 @@ contract DexSupporter is Ownable {
         Crypto.Balance[] balances;
     }
 
-    constructor(address _vault, address _pythOracle, address _lpProvider) {
+    function initialize(
+        address _vault, address _pythOracle, address _lpProvider
+    ) public initializer {
+        OwnableUpgradeable.__Ownable_init(msg.sender);
         vault = IVault(_vault);
         pythOracle = _pythOracle;
         lpProvider = _lpProvider;
+    }
+
+    function deposit(
+        address token,
+        uint256 amount
+    ) external nonReentrant {
+        require(amount > 0, "Amount must be greater than zero");
+        require(ILpProvider(lpProvider).isTokenSupported(token), "Token not supported");
+
+        require(
+            IERC20(token).transferFrom(msg.sender, address(this), amount),
+            "Transfer failed"
+        );
+
+        vault.deposit(msg.sender, token, amount);
     }
 
     // function challengeLiquidatedPosition(
@@ -118,7 +138,7 @@ contract DexSupporter is Ownable {
     function challengeLiquidatedPosition(
         uint32 requestId,
         Crypto.LiquidatedPosition[] memory positions
-    ) external {
+    ) external nonReentrant {
         DisputeInfo memory disputeInfo = getDisputeInfo(requestId);
         require(disputeInfo.isOpenDispute, "Invalid dispute status");
         require(
@@ -220,11 +240,11 @@ contract DexSupporter is Ownable {
     ) private returns (bool) {
         IPythOracle.PriceFeed[] memory feeds = IPythOracle(pythOracle)
             .parsePriceFeedUpdates(
-            liquidatedPosition.updateData,
-            liquidatedPosition.priceIds,
-            liquidatedPosition.minPublishTime,
-            liquidatedPosition.maxPublishTime
-        );
+                liquidatedPosition.updateData,
+                liquidatedPosition.priceIds,
+                liquidatedPosition.minPublishTime,
+                liquidatedPosition.maxPublishTime
+            );
 
         return Dex._checkLiquidatedPosition(position, feeds, disputeBalances);
     }
@@ -325,7 +345,7 @@ contract DexSupporter is Ownable {
     function liquidatePartially(
         address user,
         Crypto.SchnorrSignature calldata _schnorr
-    ) external {
+    ) external nonReentrant {
         Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(_schnorr);
 
         if (data.addr != user) {
