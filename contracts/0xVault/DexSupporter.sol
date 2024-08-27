@@ -9,9 +9,11 @@ import {IOracle, IRedstoneOracle, IRedstoneOracle} from "./interfaces/IOracle.so
 import {ILpProvider} from "./interfaces/ILpProvider.sol";
 import "@redstone-finance/evm-connector/contracts/data-services/PrimaryProdDataServiceConsumerBase.sol";
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
-contract DexSupporter is Ownable, PrimaryProdDataServiceConsumerBase {
+contract DexSupporter is OwnableUpgradeable, ReentrancyGuardUpgradeable, PrimaryProdDataServiceConsumerBase {
     error InvalidSchnorrSignature();
 
     IVault public vault;
@@ -26,7 +28,10 @@ contract DexSupporter is Ownable, PrimaryProdDataServiceConsumerBase {
         Crypto.Balance[] balances;
     }
 
-    constructor(address _vault, address _lpProvider) {
+    function initialize(
+        address _vault, address _lpProvider
+    ) public initializer {
+        OwnableUpgradeable.__Ownable_init(msg.sender);
         vault = IVault(_vault);
         lpProvider = _lpProvider;
     }
@@ -63,10 +68,31 @@ contract DexSupporter is Ownable, PrimaryProdDataServiceConsumerBase {
 
     // ================= END REDSTONE ===================== \\
 
+      function deposit(
+        address token,
+        uint256 amount
+    ) external nonReentrant {
+        require(amount > 0, "Amount must be greater than zero");
+        require(ILpProvider(lpProvider).isTokenSupported(token), "Token not supported");
+
+        require(
+            IERC20(token).transferFrom(msg.sender, address(this), amount),
+            "Transfer failed"
+        );
+
+        vault.deposit(msg.sender, token, amount);
+    }
+
+    // function challengeLiquidatedPosition(
+    //     uint32 requestId,
+    //     Crypto.LiquidatedPosition[] memory positions
+    // ) external {
+    //     uint256 liquidatedLen = positions.length;
+
     function challengeLiquidatedPosition(
         uint32 requestId,
         Crypto.LiquidatedPosition[] memory positions
-    ) external {
+    ) external nonReentrant {
         DisputeInfo memory disputeInfo = getDisputeInfo(requestId);
         require(disputeInfo.isOpenDispute, "Invalid dispute status");
         require(
@@ -266,7 +292,7 @@ contract DexSupporter is Ownable, PrimaryProdDataServiceConsumerBase {
     function liquidatePartially(
         address user,
         Crypto.SchnorrSignature calldata _schnorr
-    ) external {
+    ) external nonReentrant {
         Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(_schnorr);
 
         if (data.addr != user) {

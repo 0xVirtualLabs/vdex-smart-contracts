@@ -28,18 +28,16 @@ contract Vault is
     uint32 private _requestIdCounter;
 
     mapping(uint32 => Dispute) public _disputes;
-    // mapping(uint32 => ClosePositionDispute) private _positionDisputes;
     mapping(bytes => bool) private _signatureUsed;
     mapping(bytes => bool) private _schnorrSignatureUsed;
     mapping(uint32 => uint32) private _latestSchnorrSignatureId;
 
     mapping(address => address) public combinedPublicKey;
-    uint256 constant ONE = 1e9;
     // for adding LP
     mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
     address public lpProvider;
     address public dexSupporter;
-    // uint256 public lastPausedTime;
+    uint256 public lastPausedTime;
 
     struct TokenBalance {
         address token;
@@ -148,19 +146,13 @@ contract Vault is
     }
 
     function deposit(
+        address user,
         address token,
         uint256 amount
     ) external nonReentrant whenNotPaused {
-        require(amount > 0, "Amount must be greater than zero");
-        require(ILpProvider(lpProvider).isTokenSupported(token), "Token not supported");
-
-        require(
-            IERC20(token).transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
-
-        depositedAmount[msg.sender][token] += amount;
-        emit Deposited(msg.sender, token, amount);
+        require(msg.sender == dexSupporter, "Unauthorized");
+        depositedAmount[user][token] += amount;
+        emit Deposited(user, token, amount);
     }
 
     function withdrawSchnorr(
@@ -501,13 +493,13 @@ contract Vault is
         combinedPublicKey[_user] = _combinedPublicKey;
     }
 
-    // function pause() external onlyOwner {
-    //     require(block.timestamp - lastPausedTime > 1 days, "Pause too frequent"); 
-    //     _pause();
-    // }
+    function pause() external onlyOwner {
+        require(block.timestamp - lastPausedTime > 1 days, "Pause too frequent"); 
+        _pause();
+    }
 
-    // function unpause() external onlyOwner {
-    //     _unpause();
-    //     lastPausedTime = block.timestamp;
-    // }
+    function unpause() external onlyOwner {
+        _unpause();
+        lastPausedTime = block.timestamp;
+    }
 }

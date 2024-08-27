@@ -57,4 +57,10 @@ interface IVault {
         uint256[] memory losses,
         uint256 totalLossCount
     ) external;
+
+    function deposit(
+        address user,
+        address token,
+        uint256 amount
+    ) external;
 }
