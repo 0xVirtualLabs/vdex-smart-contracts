@@ -54,6 +54,7 @@ contract DexSupporter is Ownable, PrimaryProdDataServiceConsumerBase {
         return feeds;
     }
 
+    // TODO!: For testnet only
     function getAuthorisedSignerIndex(
         address signerAddress
     ) public view virtual override returns (uint8) {
