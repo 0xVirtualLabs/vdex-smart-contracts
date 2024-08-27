@@ -235,7 +235,7 @@ contract DexSupporter is OwnableUpgradeable, ReentrancyGuardUpgradeable, Primary
                 priceChange = -priceChange;
             }
             int256 multiplier = (1 +
-                (priceChange * int256(positions[i].leverageFactor)) /
+                (1e10 * priceChange * int256(positions[i].leverageFactor)) /
                 int256(positions[i].entryPrice));
             if (multiplier < 0) {
                 continue;
@@ -250,7 +250,7 @@ contract DexSupporter is OwnableUpgradeable, ReentrancyGuardUpgradeable, Primary
 
                 uint256 transferAmount = (((positions[i]
                     .collaterals[j]
-                    .quantity * uMul) / ONE) * collateralOraclePrice.price);
+                    .quantity * uMul) / ONE) * collateralOraclePrice.price) / 1e10;
 
                 // Update balance instead of transferring directly
                 for (uint256 k = 0; k < balances.length; k++) {
