@@ -5,16 +5,16 @@ import {SupraOracleDecoder} from "./libs/SupraOracleDecoder.sol";
 import {Crypto} from "./libs/Crypto.sol";
 import {Dex} from "./libs/Dex.sol";
 import {IVault} from "./interfaces/IVault.sol";
-import {IOracle, IPythOracle} from "./interfaces/IOracle.sol";
+import {IOracle, IRedstoneOracle, IRedstoneOracle} from "./interfaces/IOracle.sol";
 import {ILpProvider} from "./interfaces/ILpProvider.sol";
+import "@redstone-finance/evm-connector/contracts/data-services/PrimaryProdDataServiceConsumerBase.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract DexSupporter is Ownable {
+contract DexSupporter is Ownable, PrimaryProdDataServiceConsumerBase {
     error InvalidSchnorrSignature();
 
     IVault public vault;
-    address public pythOracle;
     address public lpProvider;
     uint256 constant ONE = 10 ^ 18;
 
@@ -26,94 +26,34 @@ contract DexSupporter is Ownable {
         Crypto.Balance[] balances;
     }
 
-    constructor(address _vault, address _pythOracle, address _lpProvider) {
+    constructor(address _vault, address _lpProvider) {
         vault = IVault(_vault);
-        pythOracle = _pythOracle;
         lpProvider = _lpProvider;
     }
 
-    // function challengeLiquidatedPosition(
-    //     uint32 requestId,
-    //     Crypto.LiquidatedPosition[] memory positions
-    // ) external {
-    //     uint256 liquidatedLen = positions.length;
+    // ================= START REDSTONE ===================== \\
+    function getPrice(
+        bytes32 dataFeedId
+    ) public view returns (IRedstoneOracle.PriceFeed memory) {
+        return
+            IRedstoneOracle.PriceFeed(
+                dataFeedId,
+                getOracleNumericValueFromTxMsg(dataFeedId)
+            );
+    }
 
-    //     (
-    //         bool isOpenDispute,
-    //         uint64 disputeTimestamp,
-    //         address _disputeUser
-    //     ) = vault.getDisputeStatus(requestId);
-    //     require(isOpenDispute, "Invalid dispute status");
-    //     require(
-    //         block.timestamp < disputeTimestamp + 1800, // fake 30m
-    //         "Dispute window closed"
-    //     );
-
-    //     Crypto.Position[] memory disputePositions = vault.getDisputePositions(
-    //         requestId
-    //     );
-    //     Crypto.Balance[] memory disputeBalances = vault.getDisputeBalances(
-    //         requestId
-    //     );
-
-    //     uint256[] memory liquidatedIndexes = new uint256[](
-    //         disputePositions.length
-    //     );
-    //     uint256 liquidatedCount = 0;
-    //     bool isCrossLiquidated = false;
-
-    //     for (uint i = 0; i < disputePositions.length; i++) {
-    //         // no leverage
-    //         if (disputePositions[i].leverageFactor == 1) {
-    //             continue;
-    //         }
-
-    //         // loop over liquidated positions
-    //         for (uint j = 0; j < liquidatedLen; j++) {
-    //             if (
-    //                 keccak256(bytes(disputePositions[i].positionId)) !=
-    //                 keccak256(bytes(positions[j].positionId))
-    //             ) {
-    //                 continue;
-    //             }
-
-    //             // get priceFeeds for position
-    //             IPythOracle.PriceFeed[] memory feeds = IPythOracle(
-    //                 pythOracle
-    //             ).parsePriceFeedUpdates(
-    //                     positions[i].updateData,
-    //                     positions[i].priceIds,
-    //                     positions[i].minPublishTime,
-    //                     positions[i].maxPublishTime
-    //                 );
-    //             if (
-    //                 Dex._checkLiquidatedPosition(
-    //                     disputePositions[i],
-    //                     feeds,
-    //                     disputeBalances
-    //                 )
-    //             ) {
-    //                 liquidatedIndexes[liquidatedCount] = i;
-    //                 liquidatedCount++;
-    //                 if (
-    //                     keccak256(
-    //                         abi.encodePacked(disputePositions[i].leverageType)
-    //                     ) == keccak256(abi.encodePacked("cross"))
-    //                 ) {
-    //                     isCrossLiquidated = true;
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     // Update the dispute in the Vault contract
-    //     vault.updateLiquidatedPositions(
-    //         requestId,
-    //         liquidatedIndexes,
-    //         liquidatedCount,
-    //         isCrossLiquidated
-    //     );
-    // }
+    function getPrices(
+        bytes32[] memory dataFeedIds
+    ) public view returns (IRedstoneOracle.PriceFeed[] memory) {
+        uint256[] memory prices = getOracleNumericValuesFromTxMsg(dataFeedIds);
+        IRedstoneOracle.PriceFeed[]
+            memory feeds = new IRedstoneOracle.PriceFeed[](prices.length);
+        for (uint i = 0; i < dataFeedIds.length; i++) {
+            feeds[i] = IRedstoneOracle.PriceFeed(dataFeedIds[i], prices[i]);
+        }
+        return feeds;
+    }
+    // ================= END REDSTONE ===================== \\
 
     function challengeLiquidatedPosition(
         uint32 requestId,
@@ -167,7 +107,7 @@ contract DexSupporter is Ownable {
         Crypto.Position[] memory disputePositions,
         Crypto.LiquidatedPosition[] memory positions,
         Crypto.Balance[] memory disputeBalances
-    ) private returns (uint256[] memory, bool) {
+    ) private view returns (uint256[] memory, bool) {
         uint256[] memory liquidatedIndexes = new uint256[](
             disputePositions.length
         );
@@ -217,13 +157,9 @@ contract DexSupporter is Ownable {
         Crypto.Position memory position,
         Crypto.LiquidatedPosition memory liquidatedPosition,
         Crypto.Balance[] memory disputeBalances
-    ) private returns (bool) {
-        IPythOracle.PriceFeed[] memory feeds = IPythOracle(pythOracle)
-            .parsePriceFeedUpdates(
-            liquidatedPosition.updateData,
-            liquidatedPosition.priceIds,
-            liquidatedPosition.minPublishTime,
-            liquidatedPosition.maxPublishTime
+    ) private view returns (bool) {
+        IRedstoneOracle.PriceFeed[] memory feeds = getPrices(
+            liquidatedPosition.priceIds
         );
 
         return Dex._checkLiquidatedPosition(position, feeds, disputeBalances);
@@ -255,10 +191,11 @@ contract DexSupporter is Ownable {
             if (positions[i].quantity == 0) {
                 continue;
             }
-            IPythOracle.PriceFeed memory oraclePrice = IPythOracle(pythOracle)
-                .queryPriceFeed(positions[i].oracleId);
+            IRedstoneOracle.PriceFeed memory oraclePrice = getPrice(
+                positions[i].oracleId
+            );
 
-            int256 priceChange = (int256(oraclePrice.price.price) -
+            int256 priceChange = (int256(oraclePrice.price) -
                 int256(positions[i].entryPrice));
             if (!positions[i].isLong) {
                 priceChange = -priceChange;
@@ -272,18 +209,14 @@ contract DexSupporter is Ownable {
             uint256 uMul = uint256(multiplier);
 
             for (uint256 j = 0; j < positions[i].collaterals.length; j++) {
-                IPythOracle.PriceFeed
-                    memory collateralOraclePrice = IPythOracle(pythOracle)
-                        .queryPriceFeed(positions[i].collaterals[j].oracleId);
-
-                if (collateralOraclePrice.price.price <= 0) {
-                    revert("Negative or zero price");
-                }
+                IRedstoneOracle.PriceFeed
+                    memory collateralOraclePrice = getPrice(
+                        positions[i].collaterals[j].oracleId
+                    );
 
                 uint256 transferAmount = (((positions[i]
                     .collaterals[j]
-                    .quantity * uMul) / ONE) *
-                    uint256(uint64(collateralOraclePrice.price.price)));
+                    .quantity * uMul) / ONE) * collateralOraclePrice.price);
 
                 // Update balance instead of transferring directly
                 for (uint256 k = 0; k < balances.length; k++) {
