@@ -12,24 +12,25 @@ const proxyModule = buildModule("ProxyModule", (m) => {
   const { lpProvider } = m.useModule(LpProviderModule);
   const crypto = m.library("Crypto");
   const dex = m.library("Dex");
-  const dexSupporter = m.contract("DexSupporter", [], {
+  const dexSupporter = m.contract("DexSupporter", [vault,
+    lpProvider,], {
     libraries: { Crypto: crypto, Dex: dex },
   });
 
+  // const initializeData = m.encodeFunctionCall(dexSupporter, "initialize", [
+  //   vault,
+  //   lpProvider,
+  // ]);
 
-  const initializeData = m.encodeFunctionCall(dexSupporter, "initialize", [
-    vault,
-    "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21",
-    lpProvider,
-  ]);
+  // const proxy = m.contract(
+  //   "TransparentUpgradeableProxy",
+  //   [dexSupporter, proxyAdmin, initializeData],
+  //   {
+  //     id: "TProxyForDexSupporter",
+  //   }
+  // );
 
-  const proxy = m.contract(
-    "TransparentUpgradeableProxy",
-    [dexSupporter, proxyAdmin, initializeData],
-    {
-      id: "TProxyForDexSupporter",
-    }
-  );
+  const proxy = dexSupporter;
 
   // Return the proxy and proxy admin so that they can be used by other modules.
   return { proxyAdmin, proxy };
