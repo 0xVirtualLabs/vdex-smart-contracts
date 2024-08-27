@@ -53,6 +53,13 @@ contract DexSupporter is Ownable, PrimaryProdDataServiceConsumerBase {
         }
         return feeds;
     }
+
+    function getAuthorisedSignerIndex(
+        address signerAddress
+    ) public view virtual override returns (uint8) {
+        return 0;
+    }
+
     // ================= END REDSTONE ===================== \\
 
     function challengeLiquidatedPosition(
