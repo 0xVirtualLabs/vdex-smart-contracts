@@ -461,6 +461,7 @@ contract Vault is
 
             if (isProfits[i]) {
                 ILpProvider(lpProvider).decreaseLpProvidedAmount(
+                    dispute.user,
                     token,
                     pnlValues[i]
                 );
