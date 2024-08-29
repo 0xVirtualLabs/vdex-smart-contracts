@@ -220,6 +220,7 @@ contract Vault is
 
             newPosition.positionId = schnorrData.positions[i].positionId;
             newPosition.token = schnorrData.positions[i].token;
+            newPosition.oracleId = schnorrData.positions[i].oracleId;
             newPosition.quantity = schnorrData.positions[i].quantity;
             newPosition.isLong = schnorrData.positions[i].isLong;
             newPosition.entryPrice = schnorrData.positions[i].entryPrice;
