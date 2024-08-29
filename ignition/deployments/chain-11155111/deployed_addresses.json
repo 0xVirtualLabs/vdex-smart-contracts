@@ -1,13 +1,6 @@
 {
-  "ProxyModule#Crypto": "0x6e2c9d31CF22D1Bc030a3764cb96e81a3FcB7384",
+  "ProxyModule#DexSupporter": "0xB9A25d7Be55c96C4470e9236Fdb80e6d0b0F41ad",
   "ProxyModule#ProxyAdmin": "0x9E8D86C82445061BFdFE956A9b928CA8501a1663",
-  "ProxyModule#Vault": "0x795C15FE1dd656F52206a4Bd93affaDfF0e5DD48",
-  "ProxyModule#TransparentUpgradeableProxy": "0x03Fe256EdcDf7eC86d40DcB4582E0685b692271D",
-  "VaultProxyModule#Vault": "0x03Fe256EdcDf7eC86d40DcB4582E0685b692271D",
-  "ProxyModule#LpProvider": "0x057b79f7CA3C5638fC741FC63c92F5E87F063e3d",
-  "ProxyModule#TProxyForLPProvider": "0x7fFd4190F53C55FB7DfAbAab2F433F2a9975540c",
-  "LpProviderModule#LpProvider": "0x7fFd4190F53C55FB7DfAbAab2F433F2a9975540c",
-  "ProxyModule#Dex": "0x4D51F10C677f297e7484D64571F3dbC5Aa01618d",
-  "ProxyModule#DexSupporter": "0xFEEEAdeDD953a3f5C86875D646daEa0bE8E5c315",
-  "DexSupporterModule#DexSupporter": "0xFEEEAdeDD953a3f5C86875D646daEa0bE8E5c315"
+  "ProxyModule#TransparentUpgradeableProxy": "0x34f1a0d52C5294a699cf383CA4da0Cf8C9e96248",
+  "VaultProxyModule#Vault": "0x34f1a0d52C5294a699cf383CA4da0Cf8C9e96248"
 }

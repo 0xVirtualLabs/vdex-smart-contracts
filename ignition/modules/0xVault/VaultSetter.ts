@@ -12,11 +12,12 @@ const VaultSetter = buildModule("VaultSetter", (m) => {
 
   const proxyAdminOwner = m.getAccount(0);
 
-  const { vault } = m.useModule(vaultProxyModule);
-  const { lpProvider } = m.useModule(LpProviderModule);
-  const { dexSupporter } = m.useModule(DexSupporterModule);
+  // const { vault } = m.useModule(vaultProxyModule);
+  // const { lpProvider } = m.useModule(LpProviderModule);
+  // const { dexSupporter } = m.useModule(DexSupporterModule);
 
-  m.call(vault, "setVaultParameters", [3600, dexSupporter, lpProvider], {
+  const vault = m.contractAt("Vault", "0x03Fe256EdcDf7eC86d40DcB4582E0685b692271D");
+m.call(vault, "setVaultParameters", [3600, "0x34f1a0d52C5294a699cf383CA4da0Cf8C9e96248", "0x7fFd4190F53C55FB7DfAbAab2F433F2a9975540c"], {
     from: proxyAdminOwner,
   });
 

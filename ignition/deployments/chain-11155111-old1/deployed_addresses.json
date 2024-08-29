@@ -1,0 +1,9 @@
+{
+  "OnlyVaultModule#Crypto": "0x6e2c9d31CF22D1Bc030a3764cb96e81a3FcB7384",
+  "OnlyVaultModule#Vault": "0xE5778C4551293e557329F95a7A41834a89e86Dc3",
+  "OnlyDexSupporterModule#Crypto": "0x6e2c9d31CF22D1Bc030a3764cb96e81a3FcB7384",
+  "OnlyDexSupporterModule#Dex": "0x4D51F10C677f297e7484D64571F3dbC5Aa01618d",
+  "OnlyDexSupporterModule#DexSupporter": "0xB9A25d7Be55c96C4470e9236Fdb80e6d0b0F41ad",
+  "ProxyModule#DexSupporter": "0xFEEEAdeDD953a3f5C86875D646daEa0bE8E5c315",
+  "ProxyModule#ProxyAdmin": "0x9E8D86C82445061BFdFE956A9b928CA8501a1663"
+}

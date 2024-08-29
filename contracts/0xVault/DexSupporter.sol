@@ -59,13 +59,6 @@ contract DexSupporter is OwnableUpgradeable, ReentrancyGuardUpgradeable, Primary
         return feeds;
     }
 
-    // TODO!: For testnet only
-    function getAuthorisedSignerIndex(
-        address signerAddress
-    ) public view virtual override returns (uint8) {
-        return 0;
-    }
-
     // ================= END REDSTONE ===================== \\
 
       function deposit(
