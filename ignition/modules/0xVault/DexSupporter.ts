@@ -2,6 +2,40 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 import vaultProxyModule from "./Proxy";
 import LpProviderModule from "./LpProvider";
 
+const proxyModule = buildModule("ProxyModule", (m) => {
+  const { proxyAdmin, vault } = m.useModule(vaultProxyModule);
+  // const proxyAdmin = m.contract("ProxyAdmin", []);
+
+  // const proxyAdminOwner = m.getAccount(0);
+  // console.log("🚀 ~ proxyModule ~ proxyAdminOwner:", proxyAdminOwner);
+  // const { vault } = m.useModule(vaultProxyModule);
+  const { lpProvider } = m.useModule(LpProviderModule);
+  const crypto = m.library("Crypto");
+  const dex = m.library("Dex");
+  const dexSupporter = m.contract("DexSupporter", [vault,
+    lpProvider,], {
+    libraries: { Crypto: crypto, Dex: dex },
+  });
+
+  // const initializeData = m.encodeFunctionCall(dexSupporter, "initialize", [
+  //   vault,
+  //   lpProvider,
+  // ]);
+
+  // const proxy = m.contract(
+  //   "TransparentUpgradeableProxy",
+  //   [dexSupporter, proxyAdmin, initializeData],
+  //   {
+  //     id: "TProxyForDexSupporter",
+  //   }
+  // );
+
+  const proxy = dexSupporter;
+
+  // Return the proxy and proxy admin so that they can be used by other modules.
+  return { proxyAdmin, proxy };
+});
+
 /**
  * This is the second module that will be run, and it is also the only module exported from this file.
  * It creates a contract instance for the Vault contract using the proxy from the previous module.
@@ -9,42 +43,17 @@ import LpProviderModule from "./LpProvider";
 const DexSupporterModule = buildModule("DexSupporterModule", (m) => {
   // Get the proxy and proxy admin from the previous module.
 
-  const { vault } = m.useModule(vaultProxyModule);
+  const { proxy, proxyAdmin } = m.useModule(proxyModule);
 
-  const { lpProvider } = m.useModule(LpProviderModule);
-
-  const Dex = m.library("Dex");
-  const Crypto = m.library("Crypto");
-  const SupraOracleDecoder = m.library("SupraOracleDecoder");
-  const supraStorge = process.env.SUPRA_STORAGE_ADDRESS;
-  if (!supraStorge) {
-    throw new Error("Please set your SUPRA_STORAGE_ADDRESS in a .env file");
-  }
-  const supraVerifier = process.env.SUPRA_VERITIFER_ADDRESS;
-  if (!supraVerifier) {
-    throw new Error("Please set your SUPRA_VERITIFER_ADDRESS in a .env file");
-  }
-
-  const dexSupporter = m.contract(
-    "DexSupporter",
-    [
-      vault,
-      supraVerifier, // TODO: supra verifier address - change it when deploy
-      supraStorge, // TODO: supra storage address - change it when deploy 
-      lpProvider,
-    ],
-    {
-      libraries: {
-        Dex: Dex,
-        Crypto: Crypto,
-        SupraOracleDecoder: SupraOracleDecoder,
-      },
-    }
-  );
+  // Here we're using m.contractAt(...) a bit differently than we did above.
+  // While we're still using it to create a contract instance, we're now telling Hardhat Ignition
+  // to treat the contract at the proxy address as an instance of the Demo contract.
+  // This allows us to interact with the underlying Demo contract via the proxy from within tests and scripts.
+  const dexSupporter = m.contractAt("DexSupporter", proxy);
 
   // Return the contract instance, along with the original proxy and proxyAdmin contracts
   // so that they can be used by other modules, or in tests and scripts.
-  return { dexSupporter };
+  return { dexSupporter, proxy, proxyAdmin };
 });
 
 export default DexSupporterModule;
