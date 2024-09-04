@@ -63,9 +63,13 @@ library Dex {
                 position.collaterals[j].quantity;
         }
 
-        totalPositionLoss +=
-            totalPositionInitialCollateral -
-            collateralCurrentValue;
+        if (collateralCurrentValue > totalPositionInitialCollateral) {
+            totalPositionLoss += 0;
+        } else {
+            totalPositionLoss +=
+                totalPositionInitialCollateral -
+                collateralCurrentValue;
+        }
 
         // cross position
         if (
