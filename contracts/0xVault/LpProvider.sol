@@ -36,6 +36,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     mapping(address => uint256) public totalNAVs; // Total NAVs for each token (10^18 decimals)
     mapping(address => mapping(address => uint256)) public userNAVs; // NAVs for each user and token (10^18 decimals)
     mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // Withdrawal requests for each user and token
+    mapping(address => mapping(address => uint256)) public claimableAmount; // user => token => amount
 
     uint256 public navPrice; // Used for precision in calculations
 
@@ -324,12 +325,21 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param amount The amount to decrease
      */
     function decreaseLpProvidedAmount(
+        address user,
         address token,
         uint256 amount
     ) external onlyVault {
-        require(lpProvidedAmount[token] >= amount, "Insufficient LP amount");
+        claimableAmount[user][token] += amount;
+    }
+
+    function claimProfit(
+        address token,
+        uint256 amount
+    ) external onlyVault {
+        require(fundAmount[token] >= amount, "Insufficient fund");
         require(IERC20(token).transfer(vault, amount), "Transfer failed");
         lpProvidedAmount[token] -= amount;
+        claimableAmount[msg.sender][token] -= amount;
         emit LPWithdrawn(address(this), token, amount);
     }
 
