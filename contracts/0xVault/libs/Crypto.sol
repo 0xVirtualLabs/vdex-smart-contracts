@@ -161,7 +161,7 @@ library Crypto {
     function decodeSchnorrDataWithdraw(
         Crypto.SchnorrSignature calldata _schnorr,
         address combinedPublicKey
-    ) external pure returns (SchnorrDataWithdraw memory) {
+    ) external view returns (SchnorrDataWithdraw memory) {
         if (!_verifySchnorrSignature(_schnorr, combinedPublicKey)) {
             revert InvalidSchnorrSignature();
         }
@@ -221,7 +221,7 @@ library Crypto {
     function _verifySchnorrSignature(
         SchnorrSignature memory _schnorr,
         address _combinedPublicKey
-    ) public pure returns (bool) {
+    ) public view returns (bool) {
         // if (_schnorrSignatureUsed[_schnorr.signature]) {
         //     revert InvalidSchnorrSignature();
         // }
@@ -259,7 +259,7 @@ library Crypto {
         if (
             e ==
             keccak256(
-                abi.encodePacked(R, uint8(parity), px, keccak256(_schnorr.data))
+                abi.encodePacked(R, uint8(parity), px, keccak256(_schnorr.data), block.chainid)
             ) &&
             address(uint160(uint256(px))) == _schnorr.combinedPublicKey
         ) {
