@@ -92,10 +92,23 @@ contract DexSupporter is Ownable {
                 }
 
                 // get priceFeeds for position
-                SupraOracleDecoder.CommitteeFeed[] memory positionFeeds;
                 SupraOracleDecoder.OracleProofV2
                     memory oracle = SupraOracleDecoder.decodeOracleProof(
                         positions[j].proofBytes
+                    );
+
+                // Calculate total number of feeds
+                uint256 totalFeeds = 0;
+                for (uint256 k = 0; k < oracle.data.length; k++) {
+                    totalFeeds += oracle
+                        .data[k]
+                        .committee_data
+                        .committee_feeds
+                        .length;
+                }
+                SupraOracleDecoder.CommitteeFeed[]
+                    memory positionFeeds = new SupraOracleDecoder.CommitteeFeed[](
+                        totalFeeds
                     );
                 uint256 feedIndex = 0;
                 for (uint256 k = 0; k < oracle.data.length; k++) {
@@ -207,10 +220,7 @@ contract DexSupporter is Ownable {
         for (uint256 i = 0; i < balances.length; i++) {
             address token = balances[i].addr;
             uint256 amount = updatedBalances[i];
-            uint256 depositedAmount = vault.depositedAmount(
-                disputeUser,
-                token
-            );
+            uint256 depositedAmount = vault.depositedAmount(disputeUser, token);
 
             if (amount > depositedAmount) {
                 pnlValues[i] = amount - depositedAmount;
@@ -291,10 +301,7 @@ contract DexSupporter is Ownable {
         // Calculate realized loss
         for (uint i = 0; i < len; i++) {
             address assetId = data.balances[i].addr;
-            uint256 depositedAmount = vault.depositedAmount(
-                data.addr,
-                assetId
-            );
+            uint256 depositedAmount = vault.depositedAmount(data.addr, assetId);
             uint256 loss = 0;
             if (depositedAmount > availableBalance[i].balance) {
                 loss = depositedAmount - availableBalance[i].balance;
