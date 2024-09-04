@@ -249,6 +249,10 @@ contract Vault is
                 .positions[i]
                 .createdTimestamp;
 
+            newPosition.oracleId = schnorrData.positions[i].oracleId;
+            newPosition.leverageFactor = schnorrData.positions[i].leverageFactor;
+            newPosition.leverageType = schnorrData.positions[i].leverageType;
+
             uint256 colLen = schnorrData.positions[i].collaterals.length;
             for (uint256 j = 0; j < colLen; j++) {
                 newPosition.collaterals.push(
@@ -341,6 +345,9 @@ contract Vault is
                 newPosition.createdTimestamp = schnorrData
                     .positions[i]
                     .createdTimestamp;
+                newPosition.oracleId = schnorrData.positions[i].oracleId;
+                newPosition.leverageFactor = schnorrData.positions[i].leverageFactor;
+                newPosition.leverageType = schnorrData.positions[i].leverageType;
 
                 uint256 colLen = schnorrData.positions[i].collaterals.length;
                 for (uint256 j = 0; j < colLen; j++) {
