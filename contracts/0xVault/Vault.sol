@@ -144,6 +144,7 @@ contract Vault is
     ) public initializer {
         OwnableUpgradeable.__Ownable_init(_owner);
         __Pausable_init();
+        __ReentrancyGuard_init();
         signatureExpiryTime = _signatureExpiryTime;
         lpProvider = _lpProvider;
         dexSupporter = _dexSupporter;
