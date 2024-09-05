@@ -11,15 +11,43 @@ import {ILpProvider} from "./interfaces/ILpProvider.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+/**
+ * @title DexSupporter
+ * @author 0x
+ * @notice This contract is responsible for supporting the 0xVault contract.
+ * It handles dispute resolution, partial liquidation, and other functions related to the 0xVault.
+ */
 contract DexSupporter is Ownable {
     error InvalidSchnorrSignature();
 
+    /**
+     * @notice The 0xVault contract.
+     */
     IVault public vault;
+    /**
+     * @notice The SupraVerifier contract.
+     */
     address public supraVerifier;
+    /**
+     * @notice The SupraStorageOracle contract.
+     */
     address public supraStorageOracle;
+    /**
+     * @notice The LpProvider contract.
+     */
     address public lpProvider;
+    /**
+     * @notice Constant value for 10^18.
+     */
     uint256 constant ONE = 10 ^ 18;
 
+    /**
+     * @notice Constructor for the DexSupporter contract.
+     * @param _vault The address of the 0xVault contract.
+     * @param _supraVerifier The address of the SupraVerifier contract.
+     * @param _supraStorageOracle The address of the SupraStorageOracle contract.
+     * @param _lpProvider The address of the LpProvider contract.
+     */
     constructor(
         address _vault,
         address _supraVerifier,
@@ -32,6 +60,11 @@ contract DexSupporter is Ownable {
         lpProvider = _lpProvider;
     }
 
+    /**
+     * @notice Challenges a liquidated position.
+     * @param requestId The ID of the dispute.
+     * @param positions The liquidated positions.
+     */
     function challengeLiquidatedPosition(
         uint32 requestId,
         Crypto.LiquidatedPosition[] memory positions
@@ -150,6 +183,10 @@ contract DexSupporter is Ownable {
         );
     }
 
+    /**
+     * @notice Settles a dispute.
+     * @param requestId The ID of the dispute.
+     */
     function settleDispute(uint32 requestId) external {
         (
             bool isOpenedDispute,
@@ -239,6 +276,11 @@ contract DexSupporter is Ownable {
         );
     }
 
+    /**
+     * @notice Liquidates a user's position partially.
+     * @param user The address of the user.
+     * @param _schnorr The Schnorr signature.
+     */
     function liquidatePartially(
         address user,
         Crypto.SchnorrSignature calldata _schnorr
@@ -325,6 +367,12 @@ contract DexSupporter is Ownable {
         );
     }
 
+    /**
+     * @notice Requires that a root hash is verified.
+     * @param root The root hash.
+     * @param sigs The signatures.
+     * @param committee_id The committee ID.
+     */
     function requireRootVerified(
         bytes32 root,
         uint256[2] memory sigs,
@@ -339,6 +387,10 @@ contract DexSupporter is Ownable {
         require(status, "Data not verified");
     }
 
+    /**
+     * @notice Sets the 0xVault contract.
+     * @param _vault The address of the 0xVault contract.
+     */
     function setVault(address _vault) external onlyOwner {
         vault = IVault(_vault);
     }
