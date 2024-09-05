@@ -262,8 +262,8 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             block.timestamp >= reqWithdraw.timestamp,
             "Withdrawal delay not met"
         );
-        _withdrawFund(token, reqWithdraw.navAmount);
         delete reqWithdraws[token][msg.sender];
+        _withdrawFund(token, reqWithdraw.navAmount);
     }
 
     /**
