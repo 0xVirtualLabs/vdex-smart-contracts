@@ -244,6 +244,7 @@ contract DexSupporter is Ownable {
         Crypto.SchnorrSignature calldata _schnorr
     ) external {
         Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(_schnorr);
+        require(!vault.isSchnorrSignatureUsed(_schnorr.signature), "Signature already used");
 
         if (data.addr != user) {
             revert InvalidSchnorrSignature();
@@ -257,6 +258,7 @@ contract DexSupporter is Ownable {
         ) {
             revert InvalidSchnorrSignature();
         }
+        vault.setSchnorrSignatureUsed(_schnorr.signature);
 
         // Initialize availableBalance
         uint256 len = data.balances.length;

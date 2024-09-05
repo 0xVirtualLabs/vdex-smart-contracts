@@ -59,4 +59,10 @@ interface IVault {
         uint256[] memory losses,
         uint256 totalLossCount
     ) external;
+
+    function setSchnorrSignatureUsed(bytes calldata signature) external;
+
+    function isSchnorrSignatureUsed(
+        bytes calldata signature
+    ) external view returns (bool);
 }

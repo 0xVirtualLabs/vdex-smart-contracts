@@ -169,6 +169,7 @@ contract Vault is
         address _combinedPublicKey,
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
+        require(!_schnorrSignatureUsed[_schnorr.signature], "Signature already used");
         Crypto.SchnorrDataWithdraw memory schnorrData = Crypto
             .decodeSchnorrDataWithdraw(_schnorr, combinedPublicKey[msg.sender]);
 
@@ -184,6 +185,7 @@ contract Vault is
             revert InvalidSchnorrSignature();
         }
 
+        _schnorrSignatureUsed[_schnorr.signature] = true;
         combinedPublicKey[msg.sender] = _combinedPublicKey;
 
         require(
@@ -204,6 +206,19 @@ contract Vault is
         } else {
             emit TokenRemoved(token);
         }
+    }
+
+    function setSchnorrSignatureUsed(bytes calldata signature) external {
+        require(msg.sender == dexSupporter, "Unauthorized");
+        _schnorrSignatureUsed[signature] = true;
+    }
+
+    function isSchnorrSignatureUsed(bytes calldata signature)
+        external
+        view
+        returns (bool)
+    {
+        return _schnorrSignatureUsed[signature];
     }
 
     function withdrawAndClosePositionTrustlessly(
@@ -297,6 +312,7 @@ contract Vault is
         uint32 requestId,
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
+        require(!_schnorrSignatureUsed[_schnorr.signature], "Signature already used");
         Dispute storage dispute = _disputes[requestId];
         Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
             _schnorr
@@ -318,6 +334,7 @@ contract Vault is
         ) {
             revert InvalidSchnorrSignature();
         }
+        _schnorrSignatureUsed[_schnorr.signature] = true;
 
         uint32 signatureId = schnorrData.signatureId;
 
