@@ -185,7 +185,7 @@ contract DexSupporter is Ownable {
                 priceChange = -priceChange;
             }
             int256 multiplier = (1 +
-                (priceChange * int256(positions[i].leverageFactor)) * 1e10 /
+                ((priceChange * int256(positions[i].leverageFactor)) * 1e10) /
                 int256(positions[i].entryPrice));
             if (multiplier < 0) {
                 continue;
@@ -197,10 +197,10 @@ contract DexSupporter is Ownable {
                     supraStorageOracle
                 ).getSvalue(positions[i].collaterals[j].oracleId);
 
-                uint256 transferAmount = (((positions[i]
-                    .collaterals[j]
-                    .quantity * uMul) / ONE) * collateralOraclePrice.price) / 1e10 /
-                    collateralOraclePrice.decimals;
+                uint256 transferAmount = (positions[i].collaterals[j].quantity *
+                    uMul *
+                    collateralOraclePrice.price) /
+                    (1e10 * collateralOraclePrice.decimals * ONE);
 
                 // Update balance instead of transferring directly
                 for (uint256 k = 0; k < balances.length; k++) {
@@ -244,7 +244,10 @@ contract DexSupporter is Ownable {
         Crypto.SchnorrSignature calldata _schnorr
     ) external {
         Crypto.SchnorrData memory data = Crypto.decodeSchnorrData(_schnorr);
-        require(!vault.isSchnorrSignatureUsed(_schnorr.signature), "Signature already used");
+        require(
+            !vault.isSchnorrSignatureUsed(_schnorr.signature),
+            "Signature already used"
+        );
 
         if (data.addr != user) {
             revert InvalidSchnorrSignature();
