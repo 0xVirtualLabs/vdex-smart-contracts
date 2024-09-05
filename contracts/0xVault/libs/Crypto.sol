@@ -13,23 +13,35 @@ library Crypto {
     error DisputeChallengeFailed();
     error SettleDisputeFailed();
 
+    /**
+     * @dev Struct representing the balance of a token.
+     */
     struct TokenBalance {
         address token;
         uint256 balance;
     }
 
+    /**
+     * @dev Struct representing parameters for trustless withdrawal.
+     */
     struct WithdrawTrustlesslyParams {
         TokenBalance[] tokenBalances;
         uint64 timestamp;
         SchnorrSignature schnorr;
     }
 
+    /**
+     * @dev Struct representing a Schnorr signature.
+     */
     struct SchnorrSignature {
         bytes data;
         bytes signature;
         address combinedPublicKey;
     }
 
+    /**
+     * @dev Struct representing parameters for withdrawal.
+     */
     struct WithdrawParams {
         address trader;
         address token;
@@ -37,6 +49,9 @@ library Crypto {
         uint64 timestamp;
     }
 
+    /**
+     * @dev Struct representing data for a Schnorr withdrawal.
+     */
     struct SchnorrDataWithdraw {
         address trader;
         address token;
@@ -45,6 +60,9 @@ library Crypto {
     }
 
     // for liquidation case
+    /**
+     * @dev Struct representing the price of an asset in an Oracle.
+     */
     struct OraclePrice {
         uint256 positionId;
         address token;
@@ -52,12 +70,18 @@ library Crypto {
         uint64 timestamp;
     }
 
+    /**
+     * @dev Struct representing a user's balance.
+     */
     struct Balance {
         uint256 oracleId;
         address addr;
         uint256 balance;
     }
 
+    /**
+     * @dev Struct representing collateral for a position.
+     */
     struct Collateral {
         uint256 oracleId;
         address token;
@@ -65,16 +89,24 @@ library Crypto {
         uint256 entryPrice;
     }
 
+    /**
+     * @dev Struct representing a liquidated position.
+     */
     struct LiquidatedPosition {
         string positionId;
         bytes proofBytes;
     }
 
+    /**
+     * @dev Struct representing an update to a dispute.
+     */
     struct UpdateDispute {
         uint32 disputeId;
-        
     }
 
+    /**
+     * @dev Struct representing a trading position.
+     */
     struct Position {
         string positionId;
         uint256 oracleId;
@@ -88,6 +120,9 @@ library Crypto {
         uint256 createdTimestamp;
     }
 
+    /**
+     * @dev Struct representing Schnorr signature data.
+     */
     struct SchnorrData {
         uint32 signatureId;
         address addr;
@@ -97,6 +132,9 @@ library Crypto {
         uint256 timestamp;
     }
 
+    /**
+     * @dev Struct representing Schnorr data for closing a position.
+     */
     struct ClosePositionSchnorrData {
         uint32 signatureId;
         address addr;
@@ -105,6 +143,9 @@ library Crypto {
         uint256 timestamp;
     }
 
+    /**
+     * @dev Enum representing the status of a dispute.
+     */
     enum DisputeStatus {
         None,
         Opened,
@@ -112,6 +153,9 @@ library Crypto {
         Settled
     }
 
+    /**
+     * @dev Struct representing a dispute.
+     */
     struct Dispute {
         address user;
         address challenger;
@@ -121,6 +165,9 @@ library Crypto {
         uint32 sessionId;
     }
 
+    /**
+     * @dev Struct representing a dispute for closing a position.
+     */
     struct ClosePositionDispute {
         address user;
         address challenger;
@@ -130,6 +177,11 @@ library Crypto {
         uint32 sessionId;
     }
 
+    /**
+     * @dev Decodes Schnorr data from a Schnorr signature.
+     * @param _schnorr The Schnorr signature to decode.
+     * @return The decoded Schnorr data.
+     */
     function decodeSchnorrData(
         Crypto.SchnorrSignature calldata _schnorr
     ) external pure returns (SchnorrData memory) {
@@ -158,6 +210,12 @@ library Crypto {
             );
     }
 
+    /**
+     * @dev Decodes Schnorr data from a Schnorr signature for withdrawal.
+     * @param _schnorr The Schnorr signature to decode.
+     * @param combinedPublicKey The combined public key to verify the signature.
+     * @return The decoded Schnorr data for withdrawal.
+     */
     function decodeSchnorrDataWithdraw(
         Crypto.SchnorrSignature calldata _schnorr,
         address combinedPublicKey
@@ -170,12 +228,12 @@ library Crypto {
         return SchnorrDataWithdraw(trader, token, amount, timestamp);
     }
 
-    //  /**
-    //  * @dev Internal function to check the validity of a signature against a digest and mark the signature as used.
-    //  *
-    //  * @param _digest (bytes32) The digest to be signed.
-    //  * @param _signature (bytes) The signature to be verified.
-    //  */
+    /**
+     * @dev Verifies an ECDSA signature.
+     * @param _digest The digest to be signed.
+     * @param _signature The signature to be verified.
+     * @param _trustedSigner The address of the trusted signer.
+     */
     function _verifySignature(
         bytes32 _digest,
         bytes calldata _signature,
@@ -199,6 +257,13 @@ library Crypto {
         // _signatureUsed[_signature] = true;
     }
 
+    /**
+     * @dev Splits a signature into its components.
+     * @param sig The signature to split.
+     * @return r The R component of the signature.
+     * @return s The S component of the signature.
+     * @return v The V component of the signature.
+     */
     function _splitSignature(
         bytes memory sig
     ) public pure returns (bytes32 r, bytes32 s, uint8 v) {
@@ -212,11 +277,10 @@ library Crypto {
     }
 
     /**
-     * @dev Internal function to verify a Schnorr signature.
-     *
-     * @param _schnorr (SchnorrSignature) The Schnorr signature to be verified.
-     *
-     * @return (bool) True if the Schnorr signature is valid, otherwise false.
+     * @dev Verifies a Schnorr signature.
+     * @param _schnorr The Schnorr signature to verify.
+     * @param _combinedPublicKey The combined public key to verify the signature.
+     * @return True if the signature is valid, otherwise false.
      */
     function _verifySchnorrSignature(
         SchnorrSignature memory _schnorr,
