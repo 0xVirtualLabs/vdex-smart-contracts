@@ -4,10 +4,28 @@ pragma solidity =0.8.24;
 import {Crypto} from "./Crypto.sol";
 import {SupraOracleDecoder} from "./SupraOracleDecoder.sol";
 
+// Start of Selection
+
+/**
+ * @title Dex
+ * @dev Library for handling Dex operations
+ */
 library Dex {
+    /**
+     * @dev Constant for maintenance margin percentage
+     */
     uint256 public constant MAINTENANCE_MARGIN_PERCENT = 50;
+    /**
+     * @dev Constant for backstop liquidation percentage
+     */
     uint256 public constant BACKSTOP_LIQUIDATION_PERCENT = 6667;
 
+    /**
+     * @dev Get the price by pair ID
+     * @param allFeeds Array of all feeds
+     * @param pair Pair ID to retrieve price for
+     * @return Price of the pair
+     */
     function _getPriceByPairId(
         SupraOracleDecoder.CommitteeFeed[] memory allFeeds,
         uint256 pair
@@ -21,6 +39,12 @@ library Dex {
         revert("given pair not found");
     }
 
+    /**
+     * @dev Calculate the position loss
+     * @param position Position data
+     * @param allFeeds Array of all feeds
+     * @return Loss amount of the position
+     */
     function _getPositionLoss(
         Crypto.Position memory position,
         SupraOracleDecoder.CommitteeFeed[] memory allFeeds
@@ -42,6 +66,13 @@ library Dex {
         }
     }
 
+    /**
+     * @dev Check if a position is liquidated
+     * @param position Position data
+     * @param allFeeds Array of all feeds
+     * @param balances Array of balances
+     * @return True if position is liquidated, false otherwise
+     */
     function _checkLiquidatedPosition(
         Crypto.Position memory position,
         SupraOracleDecoder.CommitteeFeed[] memory allFeeds,
