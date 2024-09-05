@@ -36,7 +36,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     mapping(address => uint256) public totalNAVs; // Total NAVs for each token (10^18 decimals)
     mapping(address => mapping(address => uint256)) public userNAVs; // NAVs for each user and token (10^18 decimals)
     mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // Withdrawal requests for each user and token
-    mapping(address => mapping(address => uint256)) public claimableAmount; // user => token => amount
+    mapping(address => mapping(address => uint256)) public claimableAmount; // after withdraw, user can claim profit,user => token => amount
 
     uint256 public navPrice; // Used for precision in calculations
 
@@ -332,6 +332,11 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         claimableAmount[user][token] += amount;
     }
 
+    /**
+     * @dev Allows the vault to claim profits for a specific token
+     * @param token The address of the token
+     * @param amount The amount of tokens to claim as profit
+     */
     function claimProfit(
         address token,
         uint256 amount
@@ -401,6 +406,11 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit OracleChanged(_oracle);
     }
 
+    /**
+     * @dev Sets the pair ID for tokens
+     * @param tokens Array of token addresses
+     * @param ids Array of corresponding pair IDs
+     */
     function setPairIDForTokens(
         address[] calldata tokens,
         uint256[] calldata ids
