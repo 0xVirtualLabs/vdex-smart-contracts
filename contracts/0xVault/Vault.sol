@@ -14,6 +14,10 @@ import {Dex} from "./libs/Dex.sol";
 import {SupraOracleDecoder} from "./libs/SupraOracleDecoder.sol";
 
 /**
+ * @title Vault
+ * @dev A contract for managing user funds and positions
+ * This contract allows users to deposit and withdraw funds, open and close positions,
+ * and manage their trades.
  * @custom:oz-upgrades-from Vault
  */
 contract Vault is
