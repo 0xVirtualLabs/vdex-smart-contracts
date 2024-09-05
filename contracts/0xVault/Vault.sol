@@ -21,26 +21,76 @@ contract Vault is
     ReentrancyGuardUpgradeable,
     PausableUpgradeable
 {
+    /**
+     * @dev Public variable to store the signature expiry time.
+     */
     uint256 public signatureExpiryTime;
-    uint256 private constant SECP256K1_CURVE_N =
-        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 
+    /**
+     * @dev Private constant to store the SECP256K1 curve N value.
+     */
+    uint256 private constant SECP256K1_CURVE_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+
+    /**
+     * @dev Private variable to store the request ID counter.
+     */
     uint32 private _requestIdCounter;
 
+    /**
+     * @dev Public mapping to store disputes based on their IDs.
+     */
     mapping(uint32 => Dispute) public _disputes;
+
     // mapping(uint32 => ClosePositionDispute) private _positionDisputes;
+
+    /**
+     * @dev Private mapping to track used signatures.
+     */
     mapping(bytes => bool) private _signatureUsed;
+
+    /**
+     * @dev Private mapping to track used Schnorr signatures.
+     */
     mapping(bytes => bool) private _schnorrSignatureUsed;
+
+    /**
+     * @dev Private mapping to store the latest Schnorr signature ID.
+     */
     mapping(uint32 => uint32) private _latestSchnorrSignatureId;
 
+    /**
+     * @dev Public mapping to store combined public keys.
+     */
     mapping(address => address) public combinedPublicKey;
+
+    /**
+     * @dev Public mapping to check if a token is supported.
+     */
     mapping(address => bool) public isTokenSupported;
+
+    /**
+     * @dev Constant representing the value 1e9.
+     */
     uint256 constant ONE = 1e9;
-    // for adding LP
+
+    /**
+     * @dev Public mapping to store deposited amounts for LP.
+     */
     mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
+
+    /**
+     * @dev Public variable to store the LP provider address.
+     */
     address public lpProvider;
+
+    /**
+     * @dev Public variable to store the DEX supporter address.
+     */
     address public dexSupporter;
 
+    /**
+     * @dev Struct to represent token balances.
+     */
     struct TokenBalance {
         address token;
         uint256 balance;
@@ -136,6 +186,13 @@ contract Vault is
     event PositionDisputeChallenged(uint32 requestId, address indexed user);
     event DisputeSettled(uint32 requestId, address indexed user);
 
+    /**
+     * @dev Initialize the Vault contract.
+     * @param _owner The owner of the Vault contract.
+     * @param _signatureExpiryTime The expiry time for signatures.
+     * @param _lpProvider The address of the LP provider.
+     * @param _dexSupporter The address of the DEX supporter.
+     */
     function initialize(
         address _owner,
         uint256 _signatureExpiryTime,
@@ -150,6 +207,11 @@ contract Vault is
         dexSupporter = _dexSupporter;
     }
 
+    /**
+     * @dev Deposit tokens into the Vault.
+     * @param token The address of the token to deposit.
+     * @param amount The amount of tokens to deposit.
+     */
     function deposit(
         address token,
         uint256 amount
@@ -166,6 +228,11 @@ contract Vault is
         emit Deposited(msg.sender, token, amount);
     }
 
+    /**
+     * @dev Withdraw tokens from the Vault using a Schnorr signature.
+     * @param _combinedPublicKey The combined public key of the user.
+     * @param _schnorr The Schnorr signature.
+     */
     function withdrawSchnorr(
         address _combinedPublicKey,
         Crypto.SchnorrSignature calldata _schnorr
@@ -197,6 +264,11 @@ contract Vault is
         emit Withdrawn(msg.sender, schnorrData.token, schnorrData.amount);
     }
 
+    /**
+     * @dev Set the supported status of a token.
+     * @param token The address of the token.
+     * @param isSupported Whether the token is supported.
+     */
     function setSupportedToken(
         address token,
         bool isSupported
@@ -209,11 +281,20 @@ contract Vault is
         }
     }
 
+    /**
+     * @dev Set the Schnorr signature as used.
+     * @param signature The Schnorr signature.
+     */
     function setSchnorrSignatureUsed(bytes calldata signature) external {
         require(msg.sender == dexSupporter, "Unauthorized");
         _schnorrSignatureUsed[signature] = true;
     }
 
+    /**
+     * @dev Check if a Schnorr signature has been used.
+     * @param signature The Schnorr signature.
+     * @return Whether the signature has been used.
+     */
     function isSchnorrSignatureUsed(bytes calldata signature)
         external
         view
@@ -222,6 +303,10 @@ contract Vault is
         return _schnorrSignatureUsed[signature];
     }
 
+    /**
+     * @dev Withdraw tokens and close positions trustlessly using a Schnorr signature.
+     * @param _schnorr The Schnorr signature.
+     */
     function withdrawAndClosePositionTrustlessly(
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
@@ -301,6 +386,11 @@ contract Vault is
         _openDispute(requestId, msg.sender);
     }
 
+    /**
+     * @dev Open a dispute.
+     * @param requestId The request ID of the dispute.
+     * @param user The user who opened the dispute.
+     */
     function _openDispute(uint32 requestId, address user) private {
         Dispute storage dispute = _disputes[requestId];
         dispute.status = uint8(DisputeStatus.Opened);
@@ -309,6 +399,11 @@ contract Vault is
         emit DisputeOpened(requestId, user);
     }
 
+    /**
+     * @dev Challenge a dispute.
+     * @param requestId The request ID of the dispute.
+     * @param _schnorr The Schnorr signature.
+     */
     function challengeDispute(
         uint32 requestId,
         Crypto.SchnorrSignature calldata _schnorr
@@ -398,6 +493,13 @@ contract Vault is
         }
     }
 
+    /**
+     * @dev Get the status of a dispute.
+     * @param requestId The request ID of the dispute.
+     * @return isOpenDispute Whether the dispute is open.
+     * @return timestamp The timestamp of the dispute.
+     * @return user The user who opened the dispute.
+     */
     function getDisputeStatus(
         uint32 requestId
     )
@@ -411,18 +513,35 @@ contract Vault is
         user = dispute.user;
     }
 
+    /**
+     * @dev Get the positions of a dispute.
+     * @param requestId The request ID of the dispute.
+     * @return The positions of the dispute.
+     */
     function getDisputePositions(
         uint32 requestId
     ) external view returns (Crypto.Position[] memory) {
         return _disputes[requestId].positions;
     }
 
+    /**
+     * @dev Get the balances of a dispute.
+     * @param requestId The request ID of the dispute.
+     * @return The balances of the dispute.
+     */
     function getDisputeBalances(
         uint32 requestId
     ) external view returns (Crypto.Balance[] memory) {
         return _disputes[requestId].balances;
     }
 
+    /**
+     * @dev Update the liquidated positions of a dispute.
+     * @param requestId The request ID of the dispute.
+     * @param liquidatedIndexes The indexes of the liquidated positions.
+     * @param liquidatedCount The number of liquidated positions.
+     * @param isCrossLiquidated Whether the liquidation is cross-liquidated.
+     */
     function updateLiquidatedPositions(
         uint32 requestId,
         uint256[] memory liquidatedIndexes,
@@ -518,6 +637,13 @@ contract Vault is
     //     }
     // }
 
+    /**
+     * @dev Update the partial liquidation of a user.
+     * @param user The address of the user.
+     * @param tokens The addresses of the tokens.
+     * @param losses The amounts of the losses.
+     * @param totalLossCount The total number of losses.
+     */
     function updatePartialLiquidation(
         address user,
         address[] memory tokens,
@@ -547,6 +673,13 @@ contract Vault is
         }
     }
 
+    /**
+     * @dev Settle the result of a dispute.
+     * @param requestId The request ID of the dispute.
+     * @param updatedBalances The updated balances of the user.
+     * @param pnlValues The PNL values of the user.
+     * @param isProfits Whether the PNL values are profits.
+     */
     function settleDisputeResult(
         uint32 requestId,
         uint256[] memory updatedBalances,
@@ -590,18 +723,35 @@ contract Vault is
         emit DisputeSettled(requestId, dispute.user);
     }
 
+    /**
+     * @dev Set the signature expiry time.
+     * @param _expiryTime The new signature expiry time.
+     */
     function setSignatureExpiryTime(uint256 _expiryTime) external onlyOwner {
         signatureExpiryTime = _expiryTime;
     }
 
+    /**
+     * @dev Set the DEX supporter address.
+     * @param _dexSupporter The new DEX supporter address.
+     */
     function setDexSupporter(address _dexSupporter) external onlyOwner {
         dexSupporter = _dexSupporter;
     }
 
+    /**
+     * @dev Set the LP provider address.
+     * @param _lpProvider The new LP provider address.
+     */
     function setLpProvider(address _lpProvider) external onlyOwner {
         lpProvider = _lpProvider;
     }
 
+    /**
+     * @dev Set the combined public key of a user.
+     * @param _user The address of the user.
+     * @param _combinedPublicKey The combined public key of the user.
+     */
     function setCombinedPublicKey(
         address _user,
         address _combinedPublicKey
