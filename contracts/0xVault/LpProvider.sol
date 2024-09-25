@@ -358,7 +358,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     function setLPProvider(
         address[] calldata lpProvider,
         bool[] calldata isProvider
-    ) external onlyOwner {
+    ) external {
         require(lpProvider.length == isProvider.length, "Invalid input");
         for (uint256 i = 0; i < lpProvider.length; i++) {
             isLPProvider[lpProvider[i]] = isProvider[i];
