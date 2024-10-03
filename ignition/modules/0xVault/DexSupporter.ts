@@ -22,7 +22,7 @@ const DexSupporterModule = buildModule("DexSupporterModule", (m) => {
   const dexSupporter = m.contract("DexSupporter", [
     vault,
     "0x5912A45b33aa67d2c3Bd3c93A133B727398b01Ec", // supra verifier
-    "0x131918bC49Bb7de74aC7e19d61A01544242dAA80", // supra pull oracle
+    "0x30484f27c5191A34587007aD380049d54DbCfAE7", // supra pull oracle
     lpProvider,
   ], {
     libraries: {
