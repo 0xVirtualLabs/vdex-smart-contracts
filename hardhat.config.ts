@@ -111,10 +111,21 @@ const config: any = {
     compilers: [
       {
         version: "0.8.27",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 0, // Or adjust to your needs
+          },
+        },
       },
       {
         version: "0.6.7",
-        settings: {},
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 0, // Or adjust to your needs
+          },
+        },
       },
     ],
   },
