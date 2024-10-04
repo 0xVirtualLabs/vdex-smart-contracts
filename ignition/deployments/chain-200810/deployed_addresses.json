@@ -3,12 +3,12 @@
   "ProxyModule#ProxyAdmin": "0xB61e17895c3356988386DDC445675Be619E0c942",
   "ProxyModule#Vault": "0x1150dB3aabB77Cef194bde55f4fc5722e73eD4a0",
   "ProxyModule#TransparentUpgradeableProxy": "0x43964f7667d3e43C0cCcd0e6e09b56CF77Ecfd5e",
-  "VaultProxyModule#Vault": "0x43964f7667d3e43C0cCcd0e6e09b56CF77Ecfd5e", // vault contract
+  "VaultProxyModule#Vault": "0x43964f7667d3e43C0cCcd0e6e09b56CF77Ecfd5e",
   "ProxyModule#LpProvider": "0xEafb0e3FE0CB223E2e01f6C58fC9063A1c94b51c",
   "ProxyModule#TProxyForLPProvider": "0x3f13F201d9efd693fE46909A809de7849a313770",
-  "LpProviderModule#LpProvider": "0x3f13F201d9efd693fE46909A809de7849a313770", // lp provider contract
-  "DexSupporterModule#Crypto": "0x39DAa3fFb1Ca6a94D29F0D96830bDD647b714085", // crypto lib
-  "DexSupporterModule#Dex": "0xc64aa59bA31b8a2Aa1AEf85bC9Ba144Fe9428198", // dex Lib
-  "DexSupporterModule#SupraOracleDecoder": "0xD807F6bF6980D23E1974A19e31FD1DE376d45913", // supra decoder lib
-  "DexSupporterModule#DexSupporter": "0x0723698304081e40ECb603CaCF041985a7d01B71" // dexsupporter SC
+  "LpProviderModule#LpProvider": "0x3f13F201d9efd693fE46909A809de7849a313770",
+  "DexSupporterModule#Crypto": "0x39DAa3fFb1Ca6a94D29F0D96830bDD647b714085",
+  "DexSupporterModule#Dex": "0xc64aa59bA31b8a2Aa1AEf85bC9Ba144Fe9428198",
+  "DexSupporterModule#SupraOracleDecoder": "0xD807F6bF6980D23E1974A19e31FD1DE376d45913",
+  "DexSupporterModule#DexSupporter": "0x0723698304081e40ECb603CaCF041985a7d01B71"
 }
