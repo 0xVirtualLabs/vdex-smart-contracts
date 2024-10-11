@@ -1,10 +1,9 @@
-import type { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox-viem";
 import "@nomicfoundation/hardhat-ignition-viem";
-import 'solidity-docgen';
-import "hardhat-contract-sizer";
+import "@nomicfoundation/hardhat-toolbox-viem";
 import { config as dotenvConfig } from "dotenv";
+import "hardhat-contract-sizer";
 import { NetworkUserConfig } from "hardhat/types";
+import "solidity-docgen";
 dotenvConfig();
 
 const chainIds = {
@@ -74,8 +73,8 @@ const config: any = {
     src: "./contracts",
   },
   docgen: {
-    output: 'docs',
-    pages: () => 'api.md',
+    output: "docs",
+    pages: () => "api.md",
   },
   networks: {
     // hardhat: {
@@ -111,14 +110,24 @@ const config: any = {
     compilers: [
       {
         version: "0.8.27",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 0,
+          },
+        },
       },
       {
         version: "0.6.7",
-        settings: {},
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 0,
+          },
+        },
       },
     ],
   },
-
 };
 
 export default config;
