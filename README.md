@@ -48,3 +48,5 @@ steps do deploy
 4. pass the contract addresses of lp provider and dex supporter to vault contract
 
 setDexSupporter and setLpProvider
+
+// to add new chains just add the chain info in hardhat.config.ts and ignition/chains
