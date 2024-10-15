@@ -23,6 +23,17 @@ const VaultSetter = buildModule("VaultSetter", (m) => {
   m.call(vault, "setDexSupporter", [dexSupporter], {
     from: proxyAdminOwner,
   });
+  m.call(lpProvider, "setWithdrawalDelayTime", [3600], {
+    from: proxyAdminOwner,
+  });
+  m.call(
+    lpProvider,
+    "setOracle",
+    ["0x30484f27c5191A34587007aD380049d54DbCfAE7"],
+    {
+      from: proxyAdminOwner,
+    }
+  );
 
   // Return the contract instance, along with the original proxy and proxyAdmin contracts
   // so that they can be used by other modules, or in tests and scripts.

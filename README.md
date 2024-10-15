@@ -83,4 +83,8 @@ LpProviderModule#LpProvider - 0x44299F3cf37970D7C952C64961c4F407844C3B35
 DexSupporterModule#Crypto - 0x9DfD264a30EC59Cc4A400B6d85226018728c385E
 DexSupporterModule#Dex - 0xed1a6663fCd6447CEF8A2B9B49d549922619aE58
 DexSupporterModule#SupraOracleDecoder - 0x245561425cfF971D27A80BF937969539109B24Cd
-DexSupporterModule#DexSupporter - 0x64e7C8D6dC45ADAc952d1CDdf7B973A9e6FD07bb // for dexsupporter use this one
+DexSupporterModule#DexSupporter - 0x64e7C8D6dC45ADAc952d1CDdf7B973A9e6FD07bb
+
+6. npx hardhat ignition verify chain-11155111
+
+example to verify code on an explorer
