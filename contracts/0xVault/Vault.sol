@@ -45,6 +45,11 @@ contract Vault is
      */
     mapping(uint32 => Dispute) public _disputes;
 
+    /**
+     * @dev Public mapping to store dispute status of user based on their address.
+     */
+    mapping(address => uint8) public _userDisputeStatus;
+
     // mapping(uint32 => ClosePositionDispute) private _positionDisputes;
 
     /**
@@ -309,6 +314,26 @@ contract Vault is
         return _schnorrSignatureUsed[signature];
     }
 
+// User can withdraw if did not get any signature from the VDEX. 
+    function withdrawWithoutSchnorrTrustlessly() external nonReentrant whenNotPaused{
+
+        _requestIdCounter = _requestIdCounter + 1;
+        uint32 requestId = _requestIdCounter;
+        _disputes[requestId].timestamp = uint64(block.timestamp);
+
+        require(_userDisputeStatus[msg.sender] == uint8(DisputeStatus.None) || _userDisputeStatus[msg.sender] == uint8(DisputeStatus.Settled), "User already has an open dispute");
+       
+
+        //Iterate through depositedAmount
+        for (address token in isTokenSupported) {
+            if (depositedAmount[msg.sender][token] > 0) {
+                dispute.balances.push(Crypto.Balance(token, msg.sender, depositedAmount[msg.sender][token]));
+            }
+        }
+        _openDispute(requestId, msg.sender);
+
+    }
+
     /**
      * @dev Withdraw tokens and close positions trustlessly using a Schnorr signature.
      * @param _schnorr The Schnorr signature.
@@ -400,6 +425,7 @@ contract Vault is
     function _openDispute(uint32 requestId, address user) private {
         Dispute storage dispute = _disputes[requestId];
         dispute.status = uint8(DisputeStatus.Opened);
+        _userDisputeStatus[user] = uint8(DisputeStatus.Opened);
         dispute.user = user;
 
         emit DisputeOpened(requestId, user);
@@ -724,6 +750,8 @@ contract Vault is
 
             dispute.balances[i].balance = amount;
         }
+
+        _userDisputeStatus[dispute.user] = uint8(DisputeStatus.Settled);
 
         dispute.status = uint8(DisputeStatus.Settled);
         emit DisputeSettled(requestId, dispute.user);
