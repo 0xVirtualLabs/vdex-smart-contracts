@@ -61,12 +61,14 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address indexed user,
         address indexed token,
         uint256 amount,
+        uint256 navAmount,
         uint256 fundAmount
     );
     event WithdrawFund(
         address indexed user,
         address indexed token,
         uint256 amount,
+        uint256 navAmount,
         uint256 fundAmount
     );
     event WithdrawRequested(
@@ -190,7 +192,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         userNAVs[token][msg.sender] += navs;
         fundAmount[token] += amount;
         totalNAVs[token] += navs;
-        emit DepositFund(msg.sender, token, amount, fundAmount[token]);
+        emit DepositFund(msg.sender, token, amount, navs, fundAmount[token]);
     }
 
     /**
@@ -212,7 +214,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "Transfer failed"
         );
 
-        emit WithdrawFund(msg.sender, token, tokenAmount, fundAmount[token]);
+        emit WithdrawFund(msg.sender, token, tokenAmount, navsAmount, fundAmount[token]);
     }
 
     // External functions
