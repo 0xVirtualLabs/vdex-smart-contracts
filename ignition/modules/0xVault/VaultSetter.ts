@@ -23,6 +23,15 @@ const VaultSetter = buildModule("VaultSetter", (m) => {
   m.call(vault, "setDexSupporter", [dexSupporter], {
     from: proxyAdminOwner,
   });
+
+  m.call(
+    vault,
+    "setSupportedToken",
+    ["0x0723dfdb59072ffde155da561312dbc0da8bd31b"],
+    {
+      from: proxyAdminOwner,
+    }
+  );
   m.call(lpProvider, "setWithdrawalDelayTime", [3600], {
     from: proxyAdminOwner,
   });

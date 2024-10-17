@@ -77,15 +77,32 @@ setDexSupporter and setLpProvider
 example to verify code on an explorer
 
 //bitlayer contract addresses
-ProxyModule#Crypto - 0xa1d704C19A5a40ffB7759443B097C4EE5fb1E62d
-ProxyModule#ProxyAdmin - 0x3Eeba8E99ee639BFC5dE3499Bd8a735eABDAc60F
-ProxyModule#Vault - 0xA4C72aeDede2970C7169cA3fe1b3A87C89590e45
-ProxyModule#TransparentUpgradeableProxy - 0x4cb4d5F246df44D142bBdfcA1A13025818351c79
-VaultProxyModule#Vault - 0x4cb4d5F246df44D142bBdfcA1A13025818351c79
-ProxyModule#LpProvider - 0xada6cE6B7FeE5107340F0840089A2Bf9c8302C48
-ProxyModule#TProxyForLPProvider - 0x071606EFF08A173703f57e51F502Fc974d1ce0AB
-LpProviderModule#LpProvider - 0x071606EFF08A173703f57e51F502Fc974d1ce0AB
-DexSupporterModule#Crypto - 0x73D2f34Eced18a6D4CeC8124a0BD506502218D76
-DexSupporterModule#Dex - 0x63109D56aa4b0e6BeAa2D6252bEeE2d2553b9aA7
-DexSupporterModule#SupraOracleDecoder - 0x766E3834bE8791b9612Efc317c8ba82cBD37f152
-DexSupporterModule#DexSupporter - 0x2c5fBaA612Cbb8C090cb234270584126d001637B //for dexsupporter
+
+ProxyModule#Crypto - 0x247a43e55884429c12782f49aFF889A17F873949
+ProxyModule#ProxyAdmin - 0x1C7e7B742cA51E4E05783417c008ddeb196aDca6
+ProxyModule#Vault - 0x5c92305Ea4d00E5E1C0a166f456dA92DfaF7646e
+ProxyModule#TransparentUpgradeableProxy - 0xEBB37b957f97661949c308c80D4b4ed21C26Dd8c
+VaultProxyModule#Vault - 0xEBB37b957f97661949c308c80D4b4ed21C26Dd8c // vault
+ProxyModule#LpProvider - 0x79D8d8304C50Cf6a3aD240E2326642049a619B2c
+ProxyModule#TProxyForLPProvider - 0xc12e4c2CA0e255C0266F6A1E2dDe19c4b82D9484
+LpProviderModule#LpProvider - 0xc12e4c2CA0e255C0266F6A1E2dDe19c4b82D9484 // lpprovider
+DexSupporterModule#Crypto - 0x3Ad017605600aA67257C047A7ef9D4C57Ce76E27
+DexSupporterModule#Dex - 0x4F1F2aD00f0eab0B6B6E64e5A6Ee300921C1aA16
+DexSupporterModule#SupraOracleDecoder - 0x966eA4b92815030dc59455366Ba075990D4E0D8a
+DexSupporterModule#DexSupporter - 0x0aE3e3E0F3F865b83DF4A9e89F2e997aC0303A01 // dexsupporter
+
+//sepolia
+ProxyModule#Crypto - 0x0A115b086cF7Dd88E38996c846d555C2511b2BD1
+ProxyModule#ProxyAdmin - 0x6a32dc12D3D0Cb0c24569401d72596146CB5edF8
+ProxyModule#Vault - 0x16E398194B7A4485d1C590F96190715707E15399
+ProxyModule#TransparentUpgradeableProxy - 0x5750E28E9BF2f07CDfC680c1F85029c74bFEeab5
+VaultProxyModule#Vault - 0x5750E28E9BF2f07CDfC680c1F85029c74bFEeab5 // vault
+ProxyModule#LpProvider - 0x115206a40753ED994e297c687800A48B90b66e1b
+ProxyModule#TProxyForLPProvider - 0xA67cCF03Dc3d333d23320701066fE92b090B1D0d
+LpProviderModule#LpProvider - 0xA67cCF03Dc3d333d23320701066fE92b090B1D0d // lpprovider
+DexSupporterModule#Crypto - 0xa707e6769E575bd258F21F5722e0d719221e2895
+DexSupporterModule#Dex - 0xfef2Cba98c485Cd621945A674941932D1020AE14
+DexSupporterModule#SupraOracleDecoder - 0xB983Bcf53422452Ae8660643da9e3C3D2412182E
+DexSupporterModule#DexSupporter - 0x6A128912f8935feBcbDB4deA69F0dE15a406A723 // dexsupporter
+
+// note: add new tokens to vault as supported tokens

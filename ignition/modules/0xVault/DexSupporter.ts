@@ -17,6 +17,9 @@ const DexSupporterModule = buildModule("DexSupporterModule", (m) => {
 
   const { lpProvider } = m.useModule(LpProviderModule);
 
+  // //sepolia
+  // "0x6Cd59830AAD978446e6cc7f6cc173aF7656Fb917", // supra verifier
+  // "0x131918bC49Bb7de74aC7e19d61A01544242dAA80", // supra pull oracle
   const dexSupporter = m.contract(
     "DexSupporter",
     [
