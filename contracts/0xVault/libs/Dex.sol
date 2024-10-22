@@ -32,7 +32,8 @@ library Dex {
     ) public pure returns (uint128) {
         for (uint256 i = 0; i < allFeeds.length; i++) {
             if (allFeeds[i].pair == pair) {
-                return allFeeds[i].price;
+                // 3% discount for the oracle price and OB price variance
+                return allFeeds[i].price * 97 / 100;
             }
         }
 
