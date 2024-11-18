@@ -92,7 +92,6 @@ contract Vault is
      */
     address public dexSupporter;
 
-    uint256 public lastPausedTime;
 
     /**
      * @dev Struct to represent token balances.
@@ -767,13 +766,11 @@ contract Vault is
 
 
     function pause() external onlyOwner {
-        require(block.timestamp - lastPausedTime > 1 days, "Pause too frequent"); 
         _pause();
     }
 
     function unpause() external onlyOwner {
         _unpause();
-        lastPausedTime = block.timestamp;
     }
 
 }
