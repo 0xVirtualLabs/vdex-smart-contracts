@@ -8,7 +8,6 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {Crypto} from "./libs/Crypto.sol";
-import {IOracle} from "./interfaces/IOracle.sol";
 
 /**
  * @title LpProvider
@@ -23,7 +22,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     // State variables
     address public vault; // Address of the associated vault contract
     address public coldWallet; // Address of the cold wallet for fund storage
-    address public oracle; // Address of the price oracle contract
     uint256 public startEpochTimestamp; // Timestamp of the start of the epoch
     uint256 public epochPeriod; // Duration of each epoch
     uint256 public withdrawalDelayTime; // Delay time for withdrawals
@@ -38,7 +36,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // Withdrawal requests for each user and token
     mapping(address => mapping(address => uint256)) public claimableAmount; // after withdraw, user can claim profit,user => token => amount
 
-    uint256 public navPrice; // Used for precision in calculations
+    mapping(address => uint256) public navPrice; // Used for precision in calculations
 
     // Structs
     struct ReqWithdraw {
@@ -80,14 +78,13 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     event LPProviderStatusChanged(address indexed lpProvider, bool isProvider);
     event VaultChanged(address indexed newVault);
     event ColdWalletChanged(address indexed newColdWallet);
-    event OracleChanged(address indexed newOracle);
     event EpochParametersChanged(
         uint256 newStartEpochTimestamp,
         uint256 newEpochPeriod
     );
     event WithdrawalDelayTimeChanged(uint256 newWithdrawalDelayTime);
     event RewardDepositedForMarketMaker(address indexed token, uint256 amount);
-    event NAVPriceUpdated(uint256 newPrice);
+    event NAVPriceUpdated(address indexed token, uint256 newPrice);
 
     // Modifiers
     modifier onlyVault() {
@@ -99,7 +96,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     function initialize(
         address _owner,
         address _vault,
-        address _oracle,
         uint256 _epochPeriod,
         uint256 _startEpochTimestamp,
         uint256 _withdrawalDelayTime,
@@ -108,7 +104,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         __Ownable_init(_owner);
         __ReentrancyGuard_init();
         vault = _vault;
-        oracle = _oracle;
         epochPeriod = _epochPeriod;
         startEpochTimestamp = _startEpochTimestamp;
         withdrawalDelayTime = _withdrawalDelayTime;
@@ -116,7 +111,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         // Emit events for initial parameter settings
         emit VaultChanged(_vault);
-        emit OracleChanged(_oracle);
         emit EpochParametersChanged(_startEpochTimestamp, _epochPeriod);
         emit WithdrawalDelayTimeChanged(_withdrawalDelayTime);
         emit ColdWalletChanged(_coldWallet);
@@ -134,17 +128,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address token,
         uint256 amount
     ) private view returns (uint256) {
-        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(pairId[token]);
-        uint256 usdAmount = amount * oraclePrice.price;
-        if (NAV_DECIMALS >= oraclePrice.decimals) {
-            return
-                (usdAmount * (10 ** (NAV_DECIMALS - oraclePrice.decimals))) /
-                navPrice;
-        } else {
-            return
-                (usdAmount / (10 ** (oraclePrice.decimals - NAV_DECIMALS))) /
-                navPrice;
-        }
+        return amount * (10 ** NAV_DECIMALS) / navPrice[token];
     }
 
     /**
@@ -157,18 +141,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address token,
         uint256 navAmount
     ) private view returns (uint256) {
-        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(pairId[token]);
-        if (NAV_DECIMALS >= oraclePrice.decimals) {
-            return
-                ((navAmount * navPrice) /
-                    (10 ** (NAV_DECIMALS - oraclePrice.decimals))) /
-                oraclePrice.price;
-        } else {
-            return
-                ((navAmount * navPrice) *
-                    (10 ** (oraclePrice.decimals - NAV_DECIMALS))) /
-                oraclePrice.price;
-        }
+        return navAmount * navPrice[token] / (10 ** NAV_DECIMALS);
     }
 
     /**
@@ -184,8 +157,8 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             IERC20(token).transferFrom(msg.sender, coldWallet, amount),
             "Transfer failed"
         );
-        if (navPrice == 0) {
-            navPrice = 1 * (10 ** NAV_DECIMALS); // Set initial NAV price to 1 for first time
+        if (navPrice[token] == 0) {
+            navPrice[token] = 1 * (10 ** NAV_DECIMALS); // Set initial NAV price to 1 for first time
         }
 
         uint256 navs = _calcNAVAmount(token, amount);
@@ -372,10 +345,24 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @dev Updates the NAV price for a token
      * @param newPrice The new NAV price
      */
-    function setNAVPrice(uint256 newPrice) external onlyOwner {
+    function setNAVPrice(address token, uint256 newPrice) external onlyOwner {
         require(newPrice > 0, "Invalid NAV price");
-        navPrice = newPrice;
-        emit NAVPriceUpdated(newPrice);
+        navPrice[token] = newPrice;
+        emit NAVPriceUpdated(token, newPrice);
+    }
+
+    /**
+     * @dev Updates the NAV price for multiple tokens
+     * @param tokens Array of token addresses
+     * @param newPrices Array of corresponding new NAV prices
+     */
+    function setNAVPrices(address[] calldata tokens, uint256[] calldata newPrices) external onlyOwner {
+        require(tokens.length == newPrices.length, "Invalid input");
+        for (uint256 i = 0; i < tokens.length; i++) {
+            require(newPrices[i] > 0, "Invalid NAV price");
+            navPrice[tokens[i]] = newPrices[i];
+            emit NAVPriceUpdated(tokens[i], newPrices[i]);
+        }
     }
 
     /**
@@ -396,16 +383,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         require(_coldWallet != address(0), "Invalid cold wallet address");
         coldWallet = _coldWallet;
         emit ColdWalletChanged(_coldWallet);
-    }
-
-    /**
-     * @dev Sets the oracle address
-     * @param _oracle The new oracle address
-     */
-    function setOracle(address _oracle) external onlyOwner {
-        require(_oracle != address(0), "Invalid oracle address");
-        oracle = _oracle;
-        emit OracleChanged(_oracle);
     }
 
     /**
