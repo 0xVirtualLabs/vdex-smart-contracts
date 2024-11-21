@@ -5,7 +5,12 @@ pragma solidity =0.8.27;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {
+  ECDSAUpgradeable
+} from "@openzeppelin/contracts-upgradeable/utils/cryptography/.sol";
+
 import {IVault} from "./interfaces/IVault.sol";
 import {Crypto} from "./libs/Crypto.sol";
 
@@ -15,7 +20,7 @@ import {Crypto} from "./libs/Crypto.sol";
  * This contract allows LP providers to deposit funds, request withdrawals,
  * and manage liquidity for different tokens.
  */
-contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upgradeable {
     // Constants
     uint256 public constant NAV_DECIMALS = 18; // Used for precision in calculations
 
@@ -30,19 +35,28 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     // Mappings
     mapping(address => bool) public isLPProvider; // Tracks whether an address is an LP provider
     mapping(address => uint256) public lpProvidedAmount; // Amount of liquidity provided by each LP provider
-    mapping(address => uint256) public fundAmount; // Total token amount for each token
-    mapping(address => uint256) public totalNAVs; // Total NAVs for each token (10^18 decimals)
-    mapping(address => mapping(address => uint256)) public userNAVs; // NAVs for each user and token (10^18 decimals)
-    mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // Withdrawal requests for each user and token
     mapping(address => mapping(address => uint256)) public claimableAmount; // after withdraw, user can claim profit,user => token => amount
-
-    mapping(address => uint256) public navPrice; // Used for precision in calculations
 
     // Structs
     struct ReqWithdraw {
         uint256 navAmount; // Amount of NAVs requested for withdrawal
         uint256 timestamp; // Timestamp when the withdrawal can be executed
     }
+
+    // Add this struct for EIP712 signature verification
+    struct WithdrawRequest {
+        uint256 requestId;
+        address user;
+        address token;
+        uint256 amount;
+        uint256 deadline;
+    }
+
+    // Add EIP712 domain separator and type hash constants
+    bytes32 public constant WITHDRAW_TYPEHASH = keccak256(
+        "WithdrawRequest(uint256 requestId,address user,address token,uint256 amount,uint256 deadline)"
+    );
+    bytes32 public immutable DOMAIN_SEPARATOR;
 
     // Events
     event LPProvided(
@@ -58,16 +72,12 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     event DepositFund(
         address indexed user,
         address indexed token,
-        uint256 amount,
-        uint256 navAmount,
-        uint256 fundAmount
+        uint256 amount
     );
     event WithdrawFund(
         address indexed user,
         address indexed token,
-        uint256 amount,
-        uint256 navAmount,
-        uint256 fundAmount
+        uint256 amount
     );
     event WithdrawRequested(
         address indexed user,
@@ -114,80 +124,16 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit EpochParametersChanged(_startEpochTimestamp, _epochPeriod);
         emit WithdrawalDelayTimeChanged(_withdrawalDelayTime);
         emit ColdWalletChanged(_coldWallet);
-    }
 
-    // Private functions
-
-    /**
-     * @dev Calculates the NAV amount based on the token amount
-     * @param token The address of the token
-     * @param amount The amount of tokens
-     * @return The calculated NAV amount
-     */
-    function _calcNAVAmount(
-        address token,
-        uint256 amount
-    ) private view returns (uint256) {
-        return amount * (10 ** NAV_DECIMALS) / navPrice[token];
-    }
-
-    /**
-     * @dev Calculates the token amount based on the NAV amount
-     * @param token The address of the token
-     * @param navAmount The navAmount of tokens
-     * @return The calculated amount
-     */
-    function _calcAmountFromNAV(
-        address token,
-        uint256 navAmount
-    ) private view returns (uint256) {
-        return navAmount * navPrice[token] / (10 ** NAV_DECIMALS);
-    }
-
-    /**
-     * @dev Deposits funds into the contract
-     * @param token The address of the token to deposit
-     * @param amount The amount of tokens to deposit
-     */
-    function _depositFund(address token, uint256 amount) private {
-        require(amount > 0, "Amount must be greater than zero");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
-
-        require(
-            IERC20(token).transferFrom(msg.sender, coldWallet, amount),
-            "Transfer failed"
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256("LpProvider"),
+                keccak256("1"),
+                block.chainid,
+                address(this)
+            )
         );
-        if (navPrice[token] == 0) {
-            navPrice[token] = 1 * (10 ** NAV_DECIMALS); // Set initial NAV price to 1 for first time
-        }
-
-        uint256 navs = _calcNAVAmount(token, amount);
-        userNAVs[token][msg.sender] += navs;
-        fundAmount[token] += amount;
-        totalNAVs[token] += navs;
-        emit DepositFund(msg.sender, token, amount, navs, fundAmount[token]);
-    }
-
-    /**
-     * @dev Withdraws funds from the contract
-     * @param token The address of the token to withdraw
-     * @param navsAmount The amount of NAVs to withdraw
-     */
-    function _withdrawFund(address token, uint256 navsAmount) private {
-        require(navsAmount > 0, "Amount must be greater than zero");
-        require(userNAVs[token][msg.sender] >= navsAmount, "Insufficient fund");
-
-        uint256 tokenAmount = _calcAmountFromNAV(token, navsAmount);
-        userNAVs[token][msg.sender] -= navsAmount;
-        totalNAVs[token] -= navsAmount;
-        fundAmount[token] -= tokenAmount;
-
-        require(
-            IERC20(token).transfer(msg.sender, tokenAmount),
-            "Transfer failed"
-        );
-
-        emit WithdrawFund(msg.sender, token, tokenAmount, navsAmount, fundAmount[token]);
     }
 
     // External functions
@@ -199,46 +145,58 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      */
     function depositFund(address token, uint256 amount) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
-        _depositFund(token, amount);
+        require(amount > 0, "Amount must be greater than zero");
+        require(IVault(vault).isTokenSupported(token), "Token not supported");
+
+        require(
+            IERC20(token).transferFrom(msg.sender, coldWallet, amount),
+            "Transfer failed"
+        );
+
+        emit DepositFund(msg.sender, token, amount);
     }
 
     /**
-     * @dev Allows LP providers to request a withdrawal
-     * @param token The address of the token to withdraw
-     * @param navsAmount The amount of NAVs to withdraw
+     * @dev Withdraws funds with signature verification
+     * @param requestId Unique identifier for the withdrawal request
+     * @param token The token to withdraw
+     * @param amount The amount to withdraw
+     * @param deadline Timestamp after which the signature is invalid
+     * @param signature EIP712 signature from backend
      */
-    function requestWithdrawFund(
+    function withdrawFund(
+        uint256 requestId,
         address token,
-        uint256 navsAmount
+        uint256 amount,
+        uint256 deadline,
+        bytes calldata signature
     ) external nonReentrant {
         require(isLPProvider[msg.sender], "Not LP provider");
-        require(userNAVs[token][msg.sender] >= navsAmount, "Insufficient fund");
-        uint256 withdrawTimestamp = block.timestamp + withdrawalDelayTime;
-        reqWithdraws[token][msg.sender] = ReqWithdraw(
-            navsAmount,
-            withdrawTimestamp
-        );
-        emit WithdrawRequested(
-            msg.sender,
-            token,
-            navsAmount,
-            withdrawTimestamp
-        );
-    }
+        require(amount > 0, "Amount must be greater than zero");
 
-    /**
-     * @dev Allows LP providers to withdraw funds after the delay period
-     * @param token The address of the token to withdraw
-     */
-    function withdrawFund(address token) external nonReentrant {
-        require(isLPProvider[msg.sender], "Not LP provider");
-        ReqWithdraw memory reqWithdraw = reqWithdraws[token][msg.sender];
-        require(
-            block.timestamp >= reqWithdraw.timestamp,
-            "Withdrawal delay not met"
+        // Verify signature
+        bytes32 structHash = keccak256(
+            abi.encode(
+                WITHDRAW_TYPEHASH,
+                requestId,
+                msg.sender,
+                token,
+                amount,
+                deadline
+            )
         );
-        delete reqWithdraws[token][msg.sender];
-        _withdrawFund(token, reqWithdraw.navAmount);
+        bytes32 hash = keccak256(
+            abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash)
+        );
+        address signer = ECDSAUpgradeable.recover(hash, signature);
+        require(signer == owner(), "Invalid signature");
+
+        require(
+            IERC20(token).transfer(msg.sender, amount),
+            "Transfer failed"
+        );
+
+        emit WithdrawFund(msg.sender, token, amount);
     }
 
     /**
@@ -316,7 +274,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address token,
         uint256 amount
     ) external onlyVault {
-        require(fundAmount[token] >= amount, "Insufficient fund");
         require(IERC20(token).transfer(vault, amount), "Transfer failed");
         lpProvidedAmount[token] -= amount;
         claimableAmount[msg.sender][token] -= amount;
@@ -338,30 +295,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         for (uint256 i = 0; i < lpProvider.length; i++) {
             isLPProvider[lpProvider[i]] = isProvider[i];
             emit LPProviderStatusChanged(lpProvider[i], isProvider[i]);
-        }
-    }
-
-    /**
-     * @dev Updates the NAV price for a token
-     * @param newPrice The new NAV price
-     */
-    function setNAVPrice(address token, uint256 newPrice) external onlyOwner {
-        require(newPrice > 0, "Invalid NAV price");
-        navPrice[token] = newPrice;
-        emit NAVPriceUpdated(token, newPrice);
-    }
-
-    /**
-     * @dev Updates the NAV price for multiple tokens
-     * @param tokens Array of token addresses
-     * @param newPrices Array of corresponding new NAV prices
-     */
-    function setNAVPrices(address[] calldata tokens, uint256[] calldata newPrices) external onlyOwner {
-        require(tokens.length == newPrices.length, "Invalid input");
-        for (uint256 i = 0; i < tokens.length; i++) {
-            require(newPrices[i] > 0, "Invalid NAV price");
-            navPrice[tokens[i]] = newPrices[i];
-            emit NAVPriceUpdated(tokens[i], newPrices[i]);
         }
     }
 
@@ -414,34 +347,13 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit EpochParametersChanged(_startEpochTimestamp, _epochPeriod);
     }
 
-    /**
-     * @dev Sets the withdrawal delay time
-     * @param _withdrawalDelayTime The new withdrawal delay time
-     */
-    function setWithdrawalDelayTime(
-        uint256 _withdrawalDelayTime
-    ) external onlyOwner {
-        withdrawalDelayTime = _withdrawalDelayTime;
-        emit WithdrawalDelayTimeChanged(_withdrawalDelayTime);
-    }
-
-    /**
-     * @dev Deposits rewards for market makers
-     * @param token The address of the token to deposit
-     * @param amount The amount of tokens to deposit
-     */
-    function depositRewardForMarketMaker(
-        address token,
-        uint256 amount
-    ) external onlyOwner {
-        require(amount > 0, "Amount must be greater than zero");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
-
-        require(
-            IERC20(token).transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
+     function _withdrawHash(
+        address _user,
+        uint256 _amount,
+        uint256 _nonce
+    ) private view returns (bytes32 hash) {
+        hash = _hashTypedDataV4(
+            keccak256(abi.encode(CLAIM_TYPEHASH, _user, _amount, _nonce))
         );
-        fundAmount[token] += amount;
-        emit RewardDepositedForMarketMaker(token, amount);
     }
 }
