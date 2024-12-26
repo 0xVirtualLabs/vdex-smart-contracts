@@ -33,7 +33,8 @@ contract Vault is
     /**
      * @dev Private constant to store the SECP256K1 curve N value.
      */
-    uint256 private constant SECP256K1_CURVE_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+    uint256 private constant SECP256K1_CURVE_N =
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 
     /**
      * @dev Private variable to store the request ID counter.
@@ -93,6 +94,11 @@ contract Vault is
     address public dexSupporter;
 
     uint256 public lastPausedTime;
+
+    /**
+     * @dev Address of the multisignature wallet required for large withdrawals.
+     */
+    address public multisig;
 
     /**
      * @dev Struct to represent token balances.
@@ -243,11 +249,14 @@ contract Vault is
         address _combinedPublicKey,
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
-        require(!_schnorrSignatureUsed[_schnorr.signature], "Signature already used");
+        require(
+            !_schnorrSignatureUsed[_schnorr.signature],
+            "Signature already used"
+        );
         Crypto.SchnorrDataWithdraw memory schnorrData = Crypto
             .decodeSchnorrDataWithdraw(_schnorr, combinedPublicKey[msg.sender]);
 
-        require(schnorrData.amount > 0, "Amount must byese greater than zero");
+        require(schnorrData.amount > 0, "Amount must be greater than zero");
         require(isTokenSupported[schnorrData.token], "Token not supported");
 
         require(
@@ -259,6 +268,15 @@ contract Vault is
             revert InvalidSchnorrSignature();
         }
 
+        uint256 totalBalance = IERC20(schnorrData.token).balanceOf(
+            address(this)
+        );
+        require(schnorrData.amount <= totalBalance, "Insufficient balance");
+
+        if (schnorrData.amount > totalBalance / 20) {
+            require(msg.sender == multisig, "Multisig approval required");
+        }
+
         _schnorrSignatureUsed[_schnorr.signature] = true;
         combinedPublicKey[msg.sender] = _combinedPublicKey;
 
@@ -268,6 +286,14 @@ contract Vault is
         );
 
         emit Withdrawn(msg.sender, schnorrData.token, schnorrData.amount);
+    }
+
+    /**
+     * @dev Set the multisignature address required for large withdrawals.
+     * @param _multisig The address of the multisignature wallet.
+     */
+    function setMultisig(address _multisig) external onlyOwner {
+        multisig = _multisig;
     }
 
     /**
@@ -301,11 +327,9 @@ contract Vault is
      * @param signature The Schnorr signature.
      * @return Whether the signature has been used.
      */
-    function isSchnorrSignatureUsed(bytes calldata signature)
-        external
-        view
-        returns (bool)
-    {
+    function isSchnorrSignatureUsed(
+        bytes calldata signature
+    ) external view returns (bool) {
         return _schnorrSignatureUsed[signature];
     }
 
@@ -357,7 +381,9 @@ contract Vault is
                 .createdTimestamp;
 
             newPosition.oracleId = schnorrData.positions[i].oracleId;
-            newPosition.leverageFactor = schnorrData.positions[i].leverageFactor;
+            newPosition.leverageFactor = schnorrData
+                .positions[i]
+                .leverageFactor;
             newPosition.leverageType = schnorrData.positions[i].leverageType;
 
             uint256 colLen = schnorrData.positions[i].collaterals.length;
@@ -414,7 +440,10 @@ contract Vault is
         uint32 requestId,
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
-        require(!_schnorrSignatureUsed[_schnorr.signature], "Signature already used");
+        require(
+            !_schnorrSignatureUsed[_schnorr.signature],
+            "Signature already used"
+        );
         Dispute storage dispute = _disputes[requestId];
         Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
             _schnorr
@@ -465,8 +494,12 @@ contract Vault is
                     .positions[i]
                     .createdTimestamp;
                 newPosition.oracleId = schnorrData.positions[i].oracleId;
-                newPosition.leverageFactor = schnorrData.positions[i].leverageFactor;
-                newPosition.leverageType = schnorrData.positions[i].leverageType;
+                newPosition.leverageFactor = schnorrData
+                    .positions[i]
+                    .leverageFactor;
+                newPosition.leverageType = schnorrData
+                    .positions[i]
+                    .leverageType;
 
                 uint256 colLen = schnorrData.positions[i].collaterals.length;
                 for (uint256 j = 0; j < colLen; j++) {
@@ -765,9 +798,11 @@ contract Vault is
         combinedPublicKey[_user] = _combinedPublicKey;
     }
 
-
     function pause() external onlyOwner {
-        require(block.timestamp - lastPausedTime > 1 days, "Pause too frequent"); 
+        require(
+            block.timestamp - lastPausedTime > 1 days,
+            "Pause too frequent"
+        );
         _pause();
     }
 
@@ -775,5 +810,4 @@ contract Vault is
         _unpause();
         lastPausedTime = block.timestamp;
     }
-
 }
