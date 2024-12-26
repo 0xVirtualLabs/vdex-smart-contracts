@@ -17,7 +17,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * @notice This contract is responsible for supporting the 0xVault contract.
  * It handles dispute resolution, partial liquidation, and other functions related to the 0xVault.
  */
-contract DexSupporter is Ownable {
+abstract contract DexSupporter is Ownable {
     error InvalidSchnorrSignature();
 
     /**

@@ -26,9 +26,12 @@
     "viem": "^2.19.4"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^4.9.3",
-    "@openzeppelin/contracts-upgradeable": "^5.0.2",
-    "dotenv": "^16.4.5"
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@openzeppelin/contracts": "^5.1.0",
+    "@openzeppelin/contracts-upgradeable": "^5.1.0",
+    "@openzeppelin/hardhat-upgrades": "^3.8.0",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.4"
   },
   "packageManager": "yarn@1.22.22+sha1.ac34549e6aa8e7ead463a7407e1c7390f61a6610"
 }

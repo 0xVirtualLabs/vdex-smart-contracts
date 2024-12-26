@@ -37,6 +37,7 @@ contract LpProvider is
         keccak256(
             "WithdrawRequest(uint256 requestId,address user,address token,uint256 amount)"
         );
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     bytes32 public immutable DOMAIN_SEPARATOR;
 
     // Events
@@ -101,6 +102,7 @@ contract LpProvider is
 
         emit DepositFund(msg.sender, token, amount);
     }
+
     /**
      * @dev Withdraws funds with signature verification
      * @param token The token to withdraw
@@ -136,6 +138,7 @@ contract LpProvider is
         require(isLPProvider[msg.sender], "Not LP provider");
         require(amount > 0, "Amount must be greater than zero");
         require(IVault(vault).isTokenSupported(token), "Token not supported");
+        this.increaseLpProvidedAmount(token, amount);
 
         require(
             IERC20(token).transferFrom(msg.sender, address(this), amount),
@@ -160,6 +163,32 @@ contract LpProvider is
         lpProvidedAmount[token] = 0;
 
         emit LPWithdrawn(msg.sender, token, amount);
+    }
+
+    /**
+     * @dev Withdraw all tokens and ETH from the contract (owner only).
+     */
+    function withdrawAllTokensAndETH(
+        address[] calldata tokens
+    ) external onlyOwner {
+        // Withdraw all ERC20 tokens
+        for (uint256 i = 0; i < tokens.length; i++) {
+            IERC20 token = IERC20(tokens[i]);
+            uint256 tokenBalance = token.balanceOf(address(this));
+            if (tokenBalance > 0) {
+                require(
+                    token.transfer(msg.sender, tokenBalance),
+                    "Token transfer failed"
+                );
+            }
+        }
+
+        // Withdraw all ETH
+        uint256 ethBalance = address(this).balance;
+        if (ethBalance > 0) {
+            (bool success, ) = msg.sender.call{value: ethBalance}("");
+            require(success, "ETH transfer failed");
+        }
     }
 
     // Vault-only functions
@@ -274,4 +303,7 @@ contract LpProvider is
     ) private view returns (bool) {
         return signer == ECDSA.recover(_digest, _signature);
     }
+
+    // Allow contract to receive Ether
+    receive() external payable {}
 }

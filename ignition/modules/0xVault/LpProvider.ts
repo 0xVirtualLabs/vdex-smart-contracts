@@ -47,7 +47,10 @@ const LpProviderModule = buildModule("LpProviderModule", (m) => {
   // While we're still using it to create a contract instance, we're now telling Hardhat Ignition
   // to treat the contract at the proxy address as an instance of the Demo contract.
   // This allows us to interact with the underlying Demo contract via the proxy from within tests and scripts.
-  const lpProvider = m.contractAt("LpProvider", proxy);
+  const lpProvider = m.contractAt(
+    "LpProvider",
+    "0x5750E28E9BF2f07CDfC680c1F85029c74bFEeab5"
+  );
 
   // Return the contract instance, along with the original proxy and proxyAdmin contracts
   // so that they can be used by other modules, or in tests and scripts.

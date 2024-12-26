@@ -1,5 +1,6 @@
 import "@nomicfoundation/hardhat-ignition-viem";
 import "@nomicfoundation/hardhat-toolbox-viem";
+import "@openzeppelin/hardhat-upgrades";
 import { config as dotenvConfig } from "dotenv";
 import "hardhat-contract-sizer";
 import { NetworkUserConfig } from "hardhat/types";
@@ -65,7 +66,7 @@ function getChainConfig(network: keyof typeof chainIds): NetworkUserConfig {
 }
 
 const config: any = {
-  defaultNetwork: "hardhat",
+  defaultNetwork: "sepolia",
   gasReporter: {
     currency: "USD",
     enabled: process.env.REPORT_GAS ? true : false,
@@ -98,7 +99,9 @@ const config: any = {
   },
   etherscan: {
     // Your API key for Etherscan
-    apiKey: process.env.ETHERSCAN_API_KEY,
+    apiKey: {
+      sepolia: "8K56SNZWH1IKYVWTV1GJ3FDWN91PV55RKS",
+    },
   },
   paths: {
     artifacts: "./artifacts",

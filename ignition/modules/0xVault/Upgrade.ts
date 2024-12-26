@@ -1,6 +1,5 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
-
-import vaultModule from "./Vault";
+import LpProviderModule from "./LpProvider";
 
 /**
  * This module upgrades the proxy to a new version of the Demo contract.
@@ -10,10 +9,10 @@ const upgradeModule = buildModule("UpgradeModule", (m) => {
   const proxyAdminOwner = m.getAccount(0);
 
   // Get the proxy and proxy admin from the previous module.
-  const { proxyAdmin, proxy } = m.useModule(vaultModule);
+  const { proxyAdmin, proxy } = m.useModule(LpProviderModule);
 
   // This is the new version of the Demo contract that we want to upgrade to.
-  const vault = m.contract("VaultV2");
+  const vault = m.contract("LpProvider");
 
   // The `upgradeAndCall` function on the ProxyAdmin contract allows us to upgrade the proxy
   // and call a function on the new implementation contract in a single transaction.
@@ -41,17 +40,17 @@ const upgradeModule = buildModule("UpgradeModule", (m) => {
  * It takes the proxy from the previous module and uses it to create a local contract instance
  * for the VaultV2 contract. This allows us to interact with the VaultV2 contract via the proxy.
  */
-const vaultUpgradeModule = buildModule("VaultV2Module", (m) => {
+const LpProviderUpgradeModule = buildModule("LpProviderModule", (m) => {
   // Get the proxy from the previous module.
   const { proxy } = m.useModule(upgradeModule);
 
   // Create a local contract instance for the VaultV2 contract.
   // This line tells Hardhat Ignition to use the VaultV2 ABI for the contract at the proxy address.
   // This allows us to call functions on the VaultV2 contract via the proxy.
-  const demo = m.contractAt("VaultV2", proxy);
+  const demo = m.contractAt("LpProvider", proxy);
 
   // Return the contract instance so that it can be used by other modules or in tests.
   return { demo };
 });
 
-export default vaultUpgradeModule;
+export default LpProviderUpgradeModule;
