@@ -17,11 +17,14 @@ import {Crypto} from "./libs/Crypto.sol";
  * This contract allows LP providers to deposit funds, request withdrawals,
  * and manage liquidity for different tokens.
  */
-contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upgradeable {
+contract LpProvider is
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable,
+    EIP712Upgradeable
+{
     // State variables
     address public vault; // Address of the associated vault contract
     address public signer; // Address of the signer
-    address public coldWallet; // Address of the cold wallet for fund storage
     mapping(address => uint256) public pairId; // token => pairId
 
     // Mappings
@@ -30,9 +33,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upg
     mapping(address => mapping(address => uint256)) public claimableAmount; // after withdraw, user can claim profit,user => token => amount
     mapping(bytes => bool) private _signatureUsed; // Tracks used signatures
 
-    bytes32 public constant WITHDRAW_TYPEHASH = keccak256(
-        "WithdrawRequest(uint256 requestId,address user,address token,uint256 amount)"
-    );
+    bytes32 public constant WITHDRAW_TYPEHASH =
+        keccak256(
+            "WithdrawRequest(uint256 requestId,address user,address token,uint256 amount)"
+        );
     bytes32 public immutable DOMAIN_SEPARATOR;
 
     // Events
@@ -59,7 +63,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upg
     );
     event LPProviderStatusChanged(address indexed lpProvider, bool isProvider);
     event VaultChanged(address indexed newVault);
-    event ColdWalletChanged(address indexed newColdWallet);
     event RewardDepositedForMarketMaker(address indexed token, uint256 amount);
 
     // Modifiers
@@ -69,21 +72,15 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upg
     }
 
     // Initialization function
-    function initialize(
-        address _owner,
-        address _vault,
-        address _coldWallet
-    ) public initializer {
+    function initialize(address _owner, address _vault) public initializer {
         __Ownable_init(_owner);
         __EIP712_init("VDEXLP", "1.0.0");
         __ReentrancyGuard_init();
         vault = _vault;
         signer = _owner;
-        coldWallet = _coldWallet;
 
         // Emit events for initial parameter settings
         emit VaultChanged(_vault);
-        emit ColdWalletChanged(_coldWallet);
     }
 
     // External functions
@@ -98,13 +95,13 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upg
         require(IVault(vault).isTokenSupported(token), "Token not supported");
 
         require(
-            IERC20(token).transferFrom(msg.sender, coldWallet, amount),
+            IERC20(token).transferFrom(msg.sender, address(this), amount),
             "Transfer failed"
         );
 
         emit DepositFund(msg.sender, token, amount);
     }
-/**
+    /**
      * @dev Withdraws funds with signature verification
      * @param token The token to withdraw
      * @param amount The amount to withdraw
@@ -122,10 +119,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upg
         // Verify signature
         _verifyWithdrawProof(msg.sender, token, amount, requestId, signature);
 
-        require(
-            IERC20(token).transfer(msg.sender, amount),
-            "Transfer failed"
-        );
+        require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
 
         emit WithdrawFund(msg.sender, token, amount, requestId);
     }
@@ -195,7 +189,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upg
     ) external onlyVault {
         claimableAmount[user][token] += amount;
     }
-// Owner-only functions
+    // Owner-only functions
 
     /**
      * @dev Sets the LP provider status for multiple addresses
@@ -232,16 +226,6 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upg
     }
 
     /**
-     * @dev Sets the cold wallet address
-     * @param _coldWallet The new cold wallet address
-     */
-    function setColdWallet(address _coldWallet) external onlyOwner {
-        require(_coldWallet != address(0), "Invalid cold wallet address");
-        coldWallet = _coldWallet;
-        emit ColdWalletChanged(_coldWallet);
-    }
-
-    /**
      * @dev Sets the pair ID for tokens
      * @param tokens Array of token addresses
      * @param ids Array of corresponding pair IDs
@@ -263,7 +247,9 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upg
         uint256 _reqId
     ) private view returns (bytes32 hash) {
         hash = _hashTypedDataV4(
-            keccak256(abi.encode(WITHDRAW_TYPEHASH, _reqId, _user, _token, _amount))
+            keccak256(
+                abi.encode(WITHDRAW_TYPEHASH, _reqId, _user, _token, _amount)
+            )
         );
     }
 
@@ -282,11 +268,10 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable, EIP712Upg
         _signatureUsed[_signature] = true;
     }
 
-    function _verify(bytes32 _digest, bytes memory _signature)
-        private
-        view
-        returns (bool)
-    {
+    function _verify(
+        bytes32 _digest,
+        bytes memory _signature
+    ) private view returns (bool) {
         return signer == ECDSA.recover(_digest, _signature);
     }
 }
