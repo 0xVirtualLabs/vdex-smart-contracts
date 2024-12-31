@@ -40,6 +40,10 @@ contract LpProvider is
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     bytes32 public immutable DOMAIN_SEPARATOR;
 
+    mapping(address => uint256) public withdrawalCapPerToken;
+    mapping(address => uint256) public totalWithdrawnPerToken;
+    uint256 public lastSnapshotTime;
+
     // Events
     event LPProvided(
         address indexed user,
@@ -134,10 +138,15 @@ contract LpProvider is
     ) external nonReentrant {
         require(amount > 0, "Amount must be greater than zero");
 
-        // Verify signature
+        uint256 maxWithdrawable = (IERC20(token).balanceOf(address(this)) * withdrawalCapPerToken[token]) / 100;
+        uint256 availableToWithdraw = maxWithdrawable - totalWithdrawnPerToken[token];
+        require(amount <= availableToWithdraw, "Cannot withdraw more than the set percentage of snapshot balance");
+
         _verifyWithdrawProof(msg.sender, token, amount, requestId, signature);
 
         require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
+
+        totalWithdrawnPerToken[token] += amount;
 
         emit WithdrawFund(msg.sender, token, amount, requestId);
     }
@@ -291,5 +300,19 @@ contract LpProvider is
         bytes memory _signature
     ) private view returns (bool) {
         return signer == ECDSA.recover(_digest, _signature);
+    }
+
+    function setWithdrawalCapForToken(address token, uint256 _cap) external onlyOwner {
+        withdrawalCapPerToken[token] = _cap;
+    }
+
+    function snapshot(address[] calldata tokens) external {
+        require(block.timestamp - lastSnapshotTime > 1 days, "Snapshot too frequent");
+        lastSnapshotTime = block.timestamp;
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            totalWithdrawnPerToken[token] = 0;
+        }
     }
 }
