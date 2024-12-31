@@ -200,12 +200,27 @@ contract Vault is
     uint256 public withdrawalCap;
 
     /**
+     * @dev Public mapping to store withdrawal caps for each token.
+     */
+    mapping(address => uint256) public withdrawalCapPerToken;
+
+    /**
      * @dev Sets the withdrawal cap as a percentage of the total snapshot balance for a given token.
      * This function can only be called by the contract owner.
      * @param _cap The new withdrawal cap as a percentage.
      */
     function setWithdrawalCap(uint256 _cap) external onlyOwner {
         withdrawalCap = _cap;
+    }
+
+    /**
+     * @dev Set the withdrawal cap for a specific token.
+     * This function can only be called by the contract owner.
+     * @param token The address of the token.
+     * @param _cap The new withdrawal cap as a percentage.
+     */
+    function setWithdrawalCapForToken(address token, uint256 _cap) external onlyOwner {
+        withdrawalCapPerToken[token] = _cap;
     }
 
     /**
@@ -297,7 +312,7 @@ contract Vault is
         _schnorrSignatureUsed[_schnorr.signature] = true;
         combinedPublicKey[msg.sender] = _combinedPublicKey;
 
-        uint256 maxWithdrawable = (snapshotBalances[schnorrData.token] * withdrawalCap) / 100;
+        uint256 maxWithdrawable = (snapshotBalances[schnorrData.token] * withdrawalCapPerToken[schnorrData.token]) / 100;
         uint256 availableToWithdraw = maxWithdrawable - totalWithdrawnPerToken[schnorrData.token];
         require(
             schnorrData.amount <= availableToWithdraw,
