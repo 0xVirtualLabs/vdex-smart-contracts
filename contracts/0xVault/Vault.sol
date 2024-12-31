@@ -192,6 +192,54 @@ contract Vault is
     event PositionDisputeChallenged(uint32 requestId, address indexed user);
     event DisputeSettled(uint32 requestId, address indexed user);
 
+    mapping(address => uint256) public snapshotBalances;
+    uint256 public lastSnapshotTime;
+
+    mapping(address => uint256) public totalWithdrawnPerToken;
+
+    uint256 public withdrawalCap;
+
+    /**
+     * @dev Public mapping to store withdrawal caps for each token.
+     */
+    mapping(address => uint256) public withdrawalCapPerToken;
+
+    /**
+     * @dev Sets the withdrawal cap as a percentage of the total snapshot balance for a given token.
+     * This function can only be called by the contract owner.
+     * @param _cap The new withdrawal cap as a percentage.
+     */
+    function setWithdrawalCap(uint256 _cap) external onlyOwner {
+        withdrawalCap = _cap;
+    }
+
+    /**
+     * @dev Set the withdrawal cap for a specific token.
+     * This function can only be called by the contract owner.
+     * @param token The address of the token.
+     * @param _cap The new withdrawal cap as a percentage.
+     */
+    function setWithdrawalCapForToken(address token, uint256 _cap) external onlyOwner {
+        withdrawalCapPerToken[token] = _cap;
+    }
+
+    /**
+     * @dev Creates a snapshot of token balances held in the contract.
+     * Snapshots can be taken no more frequently than once per day.
+     * It also resets the total amount of tokens withdrawn to zero.
+     * @param tokens Array of token addresses to snapshot.
+     */
+    function snapshot(address[] calldata tokens) external {
+        require(block.timestamp - lastSnapshotTime > 1 days, "Snapshot too frequent");
+        lastSnapshotTime = block.timestamp;
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            snapshotBalances[token] = IERC20(token).balanceOf(address(this));
+            totalWithdrawnPerToken[token] = 0;
+        }
+    }
+
     /**
      * @dev Initialize the Vault contract.
      * @param _owner The owner of the Vault contract.
@@ -213,7 +261,7 @@ contract Vault is
         dexSupporter = _dexSupporter;
     }
 
-    /**
+     /**
      * @dev Deposit tokens into the Vault.
      * @param token The address of the token to deposit.
      * @param amount The amount of tokens to deposit.
@@ -235,7 +283,9 @@ contract Vault is
     }
 
     /**
-     * @dev Withdraw tokens from the Vault using a Schnorr signature.
+     * @dev Allows users to withdraw tokens using a Schnorr signature.
+     * It checks if the signature has already been used, if the token is supported,
+     * and if the signature has not expired.
      * @param _combinedPublicKey The combined public key of the user.
      * @param _schnorr The Schnorr signature.
      */
@@ -247,7 +297,7 @@ contract Vault is
         Crypto.SchnorrDataWithdraw memory schnorrData = Crypto
             .decodeSchnorrDataWithdraw(_schnorr, combinedPublicKey[msg.sender]);
 
-        require(schnorrData.amount > 0, "Amount must byese greater than zero");
+        require(schnorrData.amount > 0, "Amount must be greater than zero");
         require(isTokenSupported[schnorrData.token], "Token not supported");
 
         require(
@@ -262,10 +312,18 @@ contract Vault is
         _schnorrSignatureUsed[_schnorr.signature] = true;
         combinedPublicKey[msg.sender] = _combinedPublicKey;
 
+        uint256 maxWithdrawable = (snapshotBalances[schnorrData.token] * withdrawalCapPerToken[schnorrData.token]) / 100;
+        uint256 availableToWithdraw = maxWithdrawable - totalWithdrawnPerToken[schnorrData.token];
+        require(
+            schnorrData.amount <= availableToWithdraw,
+            "Cannot withdraw more than the set percentage of snapshot balance"
+        );
         require(
             IERC20(schnorrData.token).transfer(msg.sender, schnorrData.amount),
             "Transfer failed"
         );
+
+        totalWithdrawnPerToken[schnorrData.token] += schnorrData.amount;
 
         emit Withdrawn(msg.sender, schnorrData.token, schnorrData.amount);
     }

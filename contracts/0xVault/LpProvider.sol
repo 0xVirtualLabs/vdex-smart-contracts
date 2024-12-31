@@ -37,6 +37,7 @@ contract LpProvider is
         keccak256(
             "WithdrawRequest(uint256 requestId,address user,address token,uint256 amount)"
         );
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     bytes32 public immutable DOMAIN_SEPARATOR;
 
     // Events
@@ -84,6 +85,23 @@ contract LpProvider is
     }
 
     // External functions
+
+    /**
+     * @dev Allows the owner to withdraw a specific amount of tokens from the contract.
+     * @param token The address of the token to withdraw.
+     * @param amount The amount of tokens to withdraw.
+     */
+    function withdrawTokens(address token, uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be greater than zero");
+        require(
+            IERC20(token).balanceOf(address(this)) >= amount,
+            "Insufficient token balance"
+        );
+        require(
+            IERC20(token).transfer(msg.sender, amount),
+            "Token transfer failed"
+        );
+    }
 
     /**
      * @dev Allows LP providers to deposit funds
@@ -188,7 +206,7 @@ contract LpProvider is
         uint256 amount
     ) external onlyVault {
         claimableAmount[user][token] += amount;
-    }
+    } 
     // Owner-only functions
 
     /**
