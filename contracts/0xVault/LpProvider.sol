@@ -42,7 +42,15 @@ contract LpProvider is
 
     mapping(address => uint256) public withdrawalCapPerToken;
     mapping(address => uint256) public totalWithdrawnPerToken;
-    uint256 public lastSnapshotTime;
+    // To address 7.7 (HAL-08) USE A SNAPSHOTTED BALANCE TO PREVENT UNDERFLOW ANDENFORCE A FIXED DAILY WITHDRAWAL LIMIT we comment the following line and we add the 2 lines next to it:
+    // uint256 public lastSnapshotTime;
+    mapping(address => uint256) public lastSnapshotTimePerToken;
+    mapping(address => uint256) public snapshotBalances;
+
+    /**
+     * @dev constant representing the percentage precision value.
+     */
+    uint256 private constant PRECISION_PERCENTAGE = 10_000;
 
     // Events
     event LPProvided(
@@ -105,6 +113,7 @@ contract LpProvider is
             IERC20(token).transfer(msg.sender, amount),
             "Token transfer failed"
         );
+        totalWithdrawnPerToken[token] += amount;
     }
 
     /**
@@ -123,6 +132,7 @@ contract LpProvider is
 
         emit DepositFund(msg.sender, token, amount);
     }
+
     /**
      * @dev Withdraws funds with signature verification
      * @param token The token to withdraw
@@ -138,9 +148,20 @@ contract LpProvider is
     ) external nonReentrant {
         require(amount > 0, "Amount must be greater than zero");
 
-        uint256 maxWithdrawable = (IERC20(token).balanceOf(address(this)) * withdrawalCapPerToken[token]) / 100;
-        uint256 availableToWithdraw = maxWithdrawable - totalWithdrawnPerToken[token];
-        require(amount <= availableToWithdraw, "Cannot withdraw more than the set percentage of snapshot balance");
+        if (
+            (block.number - lastSnapshotTimePerToken[token] > 7200) ||
+            lastSnapshotTimePerToken[token] == 0
+        ) snapshotPerToken(token);
+
+        uint256 maxWithdrawable = (snapshotBalances[token] *
+            withdrawalCapPerToken[token]) / PRECISION_PERCENTAGE;
+
+        uint256 availableToWithdraw = maxWithdrawable -
+            totalWithdrawnPerToken[token];
+        require(
+            amount <= availableToWithdraw,
+            "Cannot withdraw more than the set percentage of snapshot balance"
+        );
 
         _verifyWithdrawProof(msg.sender, token, amount, requestId, signature);
 
@@ -156,10 +177,10 @@ contract LpProvider is
      * @param token The address of the token to provide liquidity for
      * @param amount The amount of tokens to provide as liquidity
      */
-    function provideLiquidity(
-        address token,
-        uint256 amount
-    ) external nonReentrant {
+    function provideLiquidity(address token, uint256 amount)
+        external
+        nonReentrant
+    {
         require(isLPProvider[msg.sender], "Not LP provider");
         require(amount > 0, "Amount must be greater than zero");
         require(IVault(vault).isTokenSupported(token), "Token not supported");
@@ -173,22 +194,6 @@ contract LpProvider is
         emit LPProvided(msg.sender, token, lpProvidedAmount[token]);
     }
 
-    /**
-     * @dev Allows LP providers to withdraw all their provided liquidity
-     * @param token The address of the token to withdraw liquidity from
-     */
-    function withdrawAllLiquidity(address token) external nonReentrant {
-        require(isLPProvider[msg.sender], "Not LP provider");
-        require(IVault(vault).isTokenSupported(token), "Token not supported");
-        uint256 amount = lpProvidedAmount[token];
-        require(amount > 0, "No liquidity to withdraw");
-        require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
-
-        lpProvidedAmount[token] = 0;
-
-        emit LPWithdrawn(msg.sender, token, amount);
-    }
-
     // Vault-only functions
 
     /**
@@ -196,10 +201,10 @@ contract LpProvider is
      * @param token The address of the token
      * @param amount The amount to increase
      */
-    function increaseLpProvidedAmount(
-        address token,
-        uint256 amount
-    ) external onlyVault {
+    function increaseLpProvidedAmount(address token, uint256 amount)
+        external
+        onlyVault
+    {
         lpProvidedAmount[token] += amount;
         emit LPProvided(address(this), token, amount);
     }
@@ -215,7 +220,8 @@ contract LpProvider is
         uint256 amount
     ) external onlyVault {
         claimableAmount[user][token] += amount;
-    } 
+    }
+
     // Owner-only functions
 
     /**
@@ -295,24 +301,29 @@ contract LpProvider is
         _signatureUsed[_signature] = true;
     }
 
-    function _verify(
-        bytes32 _digest,
-        bytes memory _signature
-    ) private view returns (bool) {
+    function _verify(bytes32 _digest, bytes memory _signature)
+        private
+        view
+        returns (bool)
+    {
         return signer == ECDSA.recover(_digest, _signature);
     }
 
-    function setWithdrawalCapForToken(address token, uint256 _cap) external onlyOwner {
+    function setWithdrawalCapForToken(address token, uint256 _cap)
+        external
+        onlyOwner
+    {
+        require(
+            _cap <= PRECISION_PERCENTAGE,
+            "input _cap higher than the maximum"
+        );
         withdrawalCapPerToken[token] = _cap;
     }
 
-    function snapshot(address[] calldata tokens) external {
-        require(block.timestamp - lastSnapshotTime > 1 days, "Snapshot too frequent");
-        lastSnapshotTime = block.timestamp;
+    function snapshotPerToken(address token) private {
+        lastSnapshotTimePerToken[token] = block.number;
 
-        for (uint256 i = 0; i < tokens.length; i++) {
-            address token = tokens[i];
-            totalWithdrawnPerToken[token] = 0;
-        }
+        snapshotBalances[token] = IERC20(token).balanceOf(address(this));
+        totalWithdrawnPerToken[token] = 0;
     }
 }
