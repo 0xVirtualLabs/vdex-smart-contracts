@@ -33,7 +33,8 @@ contract Vault is
     /**
      * @dev Private constant to store the SECP256K1 curve N value.
      */
-    uint256 private constant SECP256K1_CURVE_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+    uint256 private constant SECP256K1_CURVE_N =
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 
     /**
      * @dev Private variable to store the request ID counter.
@@ -74,8 +75,15 @@ contract Vault is
 
     /**
      * @dev Constant representing the value 1e9.
+       check if this is unused and in this case remove it
      */
+
     uint256 constant ONE = 1e9;
+
+    /**
+     * @dev constant representing the percentage precision value.
+     */
+    uint256 constant PRECISION_PERCENTAGE = 10_000;
 
     /**
      * @dev Public mapping to store deposited amounts for LP.
@@ -97,6 +105,7 @@ contract Vault is
     /**
      * @dev Struct to represent token balances.
      */
+
     struct TokenBalance {
         address token;
         uint256 balance;
@@ -193,7 +202,9 @@ contract Vault is
     event DisputeSettled(uint32 requestId, address indexed user);
 
     mapping(address => uint256) public snapshotBalances;
-    uint256 public lastSnapshotTime;
+    // To address 7.7 (HAL-08) USE A SNAPSHOTTED BALANCE TO PREVENT UNDERFLOW ANDENFORCE A FIXED DAILY WITHDRAWAL LIMIT we comment the following line and we add the line next to it:
+    // uint256 public lastSnapshotTime;
+    mapping(address => uint256) public lastSnapshotTimePerToken;
 
     mapping(address => uint256) public totalWithdrawnPerToken;
 
@@ -205,11 +216,15 @@ contract Vault is
     mapping(address => uint256) public withdrawalCapPerToken;
 
     /**
-     * @dev Sets the withdrawal cap as a percentage of the total snapshot balance for a given token.
+     * @dev Sets the withdrawal cap as a percentage represented in bps of the total snapshot balance for a given token.
      * This function can only be called by the contract owner.
-     * @param _cap The new withdrawal cap as a percentage.
+     * @param _cap The new withdrawal cap as a percentage represented in bps.
      */
     function setWithdrawalCap(uint256 _cap) external onlyOwner {
+        require(
+            _cap <= PRECISION_PERCENTAGE,
+            "input _cap higher than the maximum"
+        );
         withdrawalCap = _cap;
     }
 
@@ -217,27 +232,26 @@ contract Vault is
      * @dev Set the withdrawal cap for a specific token.
      * This function can only be called by the contract owner.
      * @param token The address of the token.
-     * @param _cap The new withdrawal cap as a percentage.
+     * @param _cap The new withdrawal cap as a percentage represented in bps.
      */
-    function setWithdrawalCapForToken(address token, uint256 _cap) external onlyOwner {
+    function setWithdrawalCapForToken(address token, uint256 _cap)
+        external
+        onlyOwner
+    {
         withdrawalCapPerToken[token] = _cap;
     }
 
     /**
-     * @dev Creates a snapshot of token balances held in the contract.
+     * @dev Creates a snapshot of token balances per token held in the contract.
      * Snapshots can be taken no more frequently than once per day.
      * It also resets the total amount of tokens withdrawn to zero.
-     * @param tokens Array of token addresses to snapshot.
+     * @param token address to snapshot.
      */
-    function snapshot(address[] calldata tokens) external {
-        require(block.timestamp - lastSnapshotTime > 1 days, "Snapshot too frequent");
-        lastSnapshotTime = block.timestamp;
+    function snapshotPerToken(address token) private {
+        lastSnapshotTimePerToken[token] = block.number;
 
-        for (uint256 i = 0; i < tokens.length; i++) {
-            address token = tokens[i];
-            snapshotBalances[token] = IERC20(token).balanceOf(address(this));
-            totalWithdrawnPerToken[token] = 0;
-        }
+        snapshotBalances[token] = IERC20(token).balanceOf(address(this));
+        totalWithdrawnPerToken[token] = 0;
     }
 
     /**
@@ -261,15 +275,16 @@ contract Vault is
         dexSupporter = _dexSupporter;
     }
 
-     /**
+    /**
      * @dev Deposit tokens into the Vault.
      * @param token The address of the token to deposit.
      * @param amount The amount of tokens to deposit.
      */
-    function deposit(
-        address token,
-        uint256 amount
-    ) external nonReentrant whenNotPaused {
+    function deposit(address token, uint256 amount)
+        external
+        nonReentrant
+        whenNotPaused
+    {
         require(amount > 0, "Amount must be greater than zero");
         require(isTokenSupported[token], "Token not supported");
 
@@ -293,7 +308,10 @@ contract Vault is
         address _combinedPublicKey,
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
-        require(!_schnorrSignatureUsed[_schnorr.signature], "Signature already used");
+        require(
+            !_schnorrSignatureUsed[_schnorr.signature],
+            "Signature already used"
+        );
         Crypto.SchnorrDataWithdraw memory schnorrData = Crypto
             .decodeSchnorrDataWithdraw(_schnorr, combinedPublicKey[msg.sender]);
 
@@ -312,8 +330,15 @@ contract Vault is
         _schnorrSignatureUsed[_schnorr.signature] = true;
         combinedPublicKey[msg.sender] = _combinedPublicKey;
 
-        uint256 maxWithdrawable = (snapshotBalances[schnorrData.token] * withdrawalCapPerToken[schnorrData.token]) / 100;
-        uint256 availableToWithdraw = maxWithdrawable - totalWithdrawnPerToken[schnorrData.token];
+        if (
+            (block.number - lastSnapshotTimePerToken[schnorrData.token] >
+                7200) || lastSnapshotTimePerToken[schnorrData.token] == 0
+        ) snapshotPerToken(schnorrData.token);
+
+        uint256 maxWithdrawable = (snapshotBalances[schnorrData.token] *
+            withdrawalCapPerToken[schnorrData.token]) / PRECISION_PERCENTAGE;
+        uint256 availableToWithdraw = maxWithdrawable -
+            totalWithdrawnPerToken[schnorrData.token];
         require(
             schnorrData.amount <= availableToWithdraw,
             "Cannot withdraw more than the set percentage of snapshot balance"
@@ -325,6 +350,8 @@ contract Vault is
 
         totalWithdrawnPerToken[schnorrData.token] += schnorrData.amount;
 
+        depositedAmount[msg.sender][schnorrData.token] -= schnorrData.amount;
+
         emit Withdrawn(msg.sender, schnorrData.token, schnorrData.amount);
     }
 
@@ -333,10 +360,10 @@ contract Vault is
      * @param token The address of the token.
      * @param isSupported Whether the token is supported.
      */
-    function setSupportedToken(
-        address token,
-        bool isSupported
-    ) external onlyOwner {
+    function setSupportedToken(address token, bool isSupported)
+        external
+        onlyOwner
+    {
         isTokenSupported[token] = isSupported;
         if (isSupported) {
             emit TokenAdded(token);
@@ -349,10 +376,12 @@ contract Vault is
      * @dev Set the Schnorr signature as used.
      * @param signature The Schnorr signature.
      */
+    /* Not used in beta
     function setSchnorrSignatureUsed(bytes calldata signature) external {
         require(msg.sender == dexSupporter, "Unauthorized");
         _schnorrSignatureUsed[signature] = true;
     }
+    */
 
     /**
      * @dev Check if a Schnorr signature has been used.
@@ -371,6 +400,7 @@ contract Vault is
      * @dev Withdraw tokens and close positions trustlessly using a Schnorr signature.
      * @param _schnorr The Schnorr signature.
      */
+    /* Not used in beta
     function withdrawAndClosePositionTrustlessly(
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
@@ -415,7 +445,9 @@ contract Vault is
                 .createdTimestamp;
 
             newPosition.oracleId = schnorrData.positions[i].oracleId;
-            newPosition.leverageFactor = schnorrData.positions[i].leverageFactor;
+            newPosition.leverageFactor = schnorrData
+                .positions[i]
+                .leverageFactor;
             newPosition.leverageType = schnorrData.positions[i].leverageType;
 
             uint256 colLen = schnorrData.positions[i].collaterals.length;
@@ -449,12 +481,14 @@ contract Vault is
 
         _openDispute(requestId, msg.sender);
     }
+ */
 
     /**
      * @dev Open a dispute.
      * @param requestId The request ID of the dispute.
      * @param user The user who opened the dispute.
      */
+    /* Not used in beta
     function _openDispute(uint32 requestId, address user) private {
         Dispute storage dispute = _disputes[requestId];
         dispute.status = uint8(DisputeStatus.Opened);
@@ -462,17 +496,21 @@ contract Vault is
 
         emit DisputeOpened(requestId, user);
     }
-
+ */
     /**
      * @dev Challenge a dispute.
      * @param requestId The request ID of the dispute.
      * @param _schnorr The Schnorr signature.
      */
+    /* Not used in beta
     function challengeDispute(
         uint32 requestId,
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
-        require(!_schnorrSignatureUsed[_schnorr.signature], "Signature already used");
+        require(
+            !_schnorrSignatureUsed[_schnorr.signature],
+            "Signature already used"
+        );
         Dispute storage dispute = _disputes[requestId];
         Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
             _schnorr
@@ -523,8 +561,12 @@ contract Vault is
                     .positions[i]
                     .createdTimestamp;
                 newPosition.oracleId = schnorrData.positions[i].oracleId;
-                newPosition.leverageFactor = schnorrData.positions[i].leverageFactor;
-                newPosition.leverageType = schnorrData.positions[i].leverageType;
+                newPosition.leverageFactor = schnorrData
+                    .positions[i]
+                    .leverageFactor;
+                newPosition.leverageType = schnorrData
+                    .positions[i]
+                    .leverageType;
 
                 uint256 colLen = schnorrData.positions[i].collaterals.length;
                 for (uint256 j = 0; j < colLen; j++) {
@@ -556,7 +598,7 @@ contract Vault is
             revert DisputeChallengeFailed();
         }
     }
-
+*/
     /**
      * @dev Get the status of a dispute.
      * @param requestId The request ID of the dispute.
@@ -564,41 +606,50 @@ contract Vault is
      * @return timestamp The timestamp of the dispute.
      * @return user The user who opened the dispute.
      */
-    function getDisputeStatus(
-        uint32 requestId
-    )
+    /* Not used in beta
+    function getDisputeStatus(uint32 requestId)
         external
         view
-        returns (bool isOpenDispute, uint64 timestamp, address user)
+        returns (
+            bool isOpenDispute,
+            uint64 timestamp,
+            address user
+        )
     {
         Dispute storage dispute = _disputes[requestId];
         isOpenDispute = dispute.status == uint8(DisputeStatus.Opened);
         timestamp = dispute.timestamp;
         user = dispute.user;
     }
-
+*/
     /**
      * @dev Get the positions of a dispute.
      * @param requestId The request ID of the dispute.
      * @return The positions of the dispute.
      */
-    function getDisputePositions(
-        uint32 requestId
-    ) external view returns (Crypto.Position[] memory) {
+    /* Not used in beta
+    function getDisputePositions(uint32 requestId)
+        external
+        view
+        returns (Crypto.Position[] memory)
+    {
         return _disputes[requestId].positions;
     }
-
+*/
     /**
      * @dev Get the balances of a dispute.
      * @param requestId The request ID of the dispute.
      * @return The balances of the dispute.
      */
-    function getDisputeBalances(
-        uint32 requestId
-    ) external view returns (Crypto.Balance[] memory) {
+    /* Not used in beta
+    function getDisputeBalances(uint32 requestId)
+        external
+        view
+        returns (Crypto.Balance[] memory)
+    {
         return _disputes[requestId].balances;
     }
-
+*/
     /**
      * @dev Update the liquidated positions of a dispute.
      * @param requestId The request ID of the dispute.
@@ -606,6 +657,7 @@ contract Vault is
      * @param liquidatedCount The number of liquidated positions.
      * @param isCrossLiquidated Whether the liquidation is cross-liquidated.
      */
+    /* Not used in beta
     function updateLiquidatedPositions(
         uint32 requestId,
         uint256[] memory liquidatedIndexes,
@@ -633,7 +685,7 @@ contract Vault is
             }
         }
     }
-
+*/
     // function liquidatePartially(
     //     address user,
     //     Crypto.SchnorrSignature calldata _schnorr
@@ -708,6 +760,7 @@ contract Vault is
      * @param losses The amounts of the losses.
      * @param totalLossCount The total number of losses.
      */
+    /* Not used in beta
     function updatePartialLiquidation(
         address user,
         address[] memory tokens,
@@ -729,14 +782,36 @@ contract Vault is
             );
             depositedAmount[user][token] -= loss;
 
+            // To address 7.7 (HAL-08) we add the following lines:
+            if (
+                block.timestamp - lastSnapshotTimePerToken[token] > 1 days ||
+                lastSnapshotTimePerToken[token] == 0
+            ) snapshotPerToken(token);
+
+            uint256 maxWithdrawable = (snapshotBalances[token] *
+                withdrawalCapPerToken[token]) / PRECISION_PERCENTAGE;
+            uint256 availableToWithdraw = maxWithdrawable -
+                totalWithdrawnPerToken[token];
+            require(
+                loss <= availableToWithdraw,
+                "Cannot withdraw more than the set percentage of snapshot balance"
+            );
+            // until here
+
             // Transfer realized loss to insurance pool
-            IERC20(token).transfer(lpProvider, loss);
+            require(
+                IERC20(token).transfer(lpProvider, loss),
+                "Transfer failed"
+            );
+            // for 7.7 we also add the following line:
+            totalWithdrawnPerToken[token] += loss;
+
             ILpProvider(lpProvider).increaseLpProvidedAmount(token, loss);
 
             emit PartialLiquidation(user, token, loss);
         }
     }
-
+*/
     /**
      * @dev Settle the result of a dispute.
      * @param requestId The request ID of the dispute.
@@ -744,6 +819,7 @@ contract Vault is
      * @param pnlValues The PNL values of the user.
      * @param isProfits Whether the PNL values are profits.
      */
+    /* Not used in beta
     function settleDisputeResult(
         uint32 requestId,
         uint256[] memory updatedBalances,
@@ -786,7 +862,7 @@ contract Vault is
         dispute.status = uint8(DisputeStatus.Settled);
         emit DisputeSettled(requestId, dispute.user);
     }
-
+*/
     /**
      * @dev Set the signature expiry time.
      * @param _expiryTime The new signature expiry time.
@@ -816,16 +892,18 @@ contract Vault is
      * @param _user The address of the user.
      * @param _combinedPublicKey The combined public key of the user.
      */
-    function setCombinedPublicKey(
-        address _user,
-        address _combinedPublicKey
-    ) external onlyOwner {
+    function setCombinedPublicKey(address _user, address _combinedPublicKey)
+        external
+        onlyOwner
+    {
         combinedPublicKey[_user] = _combinedPublicKey;
     }
 
-
     function pause() external onlyOwner {
-        require(block.timestamp - lastPausedTime > 1 days, "Pause too frequent"); 
+        require(
+            block.timestamp - lastPausedTime > 1 days,
+            "Pause too frequent"
+        );
         _pause();
     }
 
@@ -833,5 +911,4 @@ contract Vault is
         _unpause();
         lastPausedTime = block.timestamp;
     }
-
 }
