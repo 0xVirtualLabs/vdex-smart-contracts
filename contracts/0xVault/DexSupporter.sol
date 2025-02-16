@@ -5,6 +5,7 @@ import {SupraOracleDecoder} from "./libs/SupraOracleDecoder.sol";
 import {Crypto} from "./libs/Crypto.sol";
 import {Dex} from "./libs/Dex.sol";
 import {IVault} from "./interfaces/IVault.sol";
+import {ILpProvider} from "./interfaces/ILpProvider.sol";
 import {ISupraVerifier} from "./interfaces/ISupraVerifier.sol";
 import {IOracle} from "./interfaces/IOracle.sol";
 import {ILpProvider} from "./interfaces/ILpProvider.sol";
@@ -25,6 +26,10 @@ contract DexSupporter is Ownable {
      */
     IVault public vault;
     /**
+     * @notice The 0xLpProvider contract.
+     */
+    ILpProvider public LpProvider;
+    /**
      * @notice The SupraVerifier contract.
      */
     address public supraVerifier;
@@ -39,7 +44,16 @@ contract DexSupporter is Ownable {
     /**
      * @notice Constant value for 10^18.
      */
-    uint256 constant ONE = 10 ^ 18;
+
+    // 7.2 (HAL-02) INCORRECT EXPONENTIATION OPERATOR USAGE LEADS TOINVALID ONE CONSTANT VALUE
+    // For this reason we comment the following line and we add the line next to it:
+    // uint256 constant ONE = 10 ^ 18;
+    uint256 constant ONE = 1e18;
+
+    // added for 7.5 (HAL-06) UNBOUNDED LOOPS CREATE DOS RISK IN DISPUTESETTLEMENT PROCESS
+    uint256 constant MAX_POSITIONS = 15;
+    uint256 constant MAX_COLLATERALS = 10;
+    uint256 constant MAX_BALANCES = 15;
 
     /**
      * @notice Constructor for the DexSupporter contract.
@@ -65,6 +79,7 @@ contract DexSupporter is Ownable {
      * @param requestId The ID of the dispute.
      * @param positions The liquidated positions.
      */
+    /* Not used in beta
     function challengeLiquidatedPosition(
         uint32 requestId,
         Crypto.LiquidatedPosition[] memory positions
@@ -73,9 +88,10 @@ contract DexSupporter is Ownable {
 
         (
             bool isOpenDispute,
-            uint64 disputeTimestamp,
-            address _disputeUser
-        ) = vault.getDisputeStatus(requestId);
+            uint64 disputeTimestamp, // the variable in next line was unused and we comment it:
+
+        ) = //    address _disputeUser
+            vault.getDisputeStatus(requestId);
         require(isOpenDispute, "Invalid dispute status");
         require(
             block.timestamp < disputeTimestamp + 1800, // fake 30m
@@ -109,14 +125,14 @@ contract DexSupporter is Ownable {
         uint256 liquidatedCount = 0;
         bool isCrossLiquidated = false;
 
-        for (uint i = 0; i < disputePositions.length; i++) {
+        for (uint256 i = 0; i < disputePositions.length; i++) {
             // no leverage
             if (disputePositions[i].leverageFactor == 1) {
                 continue;
             }
 
             // loop over liquidated positions
-            for (uint j = 0; j < liquidatedLen; j++) {
+            for (uint256 j = 0; j < liquidatedLen; j++) {
                 if (
                     keccak256(bytes(disputePositions[i].positionId)) !=
                     keccak256(bytes(positions[j].positionId))
@@ -182,11 +198,13 @@ contract DexSupporter is Ownable {
             isCrossLiquidated
         );
     }
+*/
 
     /**
      * @notice Settles a dispute.
      * @param requestId The ID of the dispute.
      */
+    /* Not used in beta
     function settleDispute(uint32 requestId) external {
         (
             bool isOpenedDispute,
@@ -204,12 +222,24 @@ contract DexSupporter is Ownable {
         );
         Crypto.Balance[] memory balances = vault.getDisputeBalances(requestId);
 
+        // added for 7.5 (HAL-06) UNBOUNDED LOOPS CREATE DOS RISK IN DISPUTESETTLEMENT PROCESS
+        require(
+            balances.length <= MAX_BALANCES,
+            "balances array longer than the maximum"
+        );
+
         uint256[] memory updatedBalances = new uint256[](balances.length);
         for (uint256 i = 0; i < balances.length; i++) {
             updatedBalances[i] = balances[i].balance;
         }
 
-        for (uint i = 0; i < positions.length; i++) {
+        // added for 7.5 (HAL-06) UNBOUNDED LOOPS CREATE DOS RISK IN DISPUTESETTLEMENT PROCESS
+        require(
+            positions.length <= MAX_POSITIONS,
+            "positions array longer than the maximum"
+        );
+
+        for (uint256 i = 0; i < positions.length; i++) {
             if (positions[i].quantity == 0) {
                 continue;
             }
@@ -228,6 +258,12 @@ contract DexSupporter is Ownable {
                 continue;
             }
             uint256 uMul = uint256(multiplier);
+
+            // added for 7.5 (HAL-06) UNBOUNDED LOOPS CREATE DOS RISK IN DISPUTESETTLEMENT PROCESS
+            require(
+                positions[i].collaterals.length <= MAX_COLLATERALS,
+                "collaterals array longer than the maximum"
+            );
 
             for (uint256 j = 0; j < positions[i].collaterals.length; j++) {
                 IOracle.priceFeed memory collateralOraclePrice = IOracle(
@@ -275,12 +311,14 @@ contract DexSupporter is Ownable {
             isProfits
         );
     }
+*/
 
     /**
      * @notice Liquidates a user's position partially.
      * @param user The address of the user.
      * @param _schnorr The Schnorr signature.
      */
+    /* Not used in beta
     function liquidatePartially(
         address user,
         Crypto.SchnorrSignature calldata _schnorr
@@ -308,7 +346,7 @@ contract DexSupporter is Ownable {
         // Initialize availableBalance
         uint256 len = data.balances.length;
         Crypto.Balance[] memory availableBalance = new Crypto.Balance[](len);
-        for (uint i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; i++) {
             availableBalance[i] = Crypto.Balance(
                 data.balances[i].oracleId,
                 data.balances[i].addr,
@@ -317,8 +355,8 @@ contract DexSupporter is Ownable {
         }
 
         // Calculate available balance from SchnorrData balances
-        for (uint i = 0; i < len; i++) {
-            for (uint j = 0; j < availableBalance.length; j++) {
+        for (uint256 i = 0; i < len; i++) {
+            for (uint256 j = 0; j < availableBalance.length; j++) {
                 if (data.balances[i].addr == availableBalance[j].addr) {
                     availableBalance[j].balance += data.balances[i].balance;
                     break;
@@ -328,10 +366,10 @@ contract DexSupporter is Ownable {
 
         // Add initial margins to available balance from SchnorrData positions
         uint256 posLen = data.positions.length;
-        for (uint i = 0; i < posLen; i++) {
-            for (uint j = 0; j < data.positions[i].collaterals.length; j++) {
+        for (uint256 i = 0; i < posLen; i++) {
+            for (uint256 j = 0; j < data.positions[i].collaterals.length; j++) {
                 Crypto.Collateral memory im = data.positions[i].collaterals[j];
-                for (uint k = 0; k < availableBalance.length; k++) {
+                for (uint256 k = 0; k < availableBalance.length; k++) {
                     if (im.token == availableBalance[k].addr) {
                         availableBalance[k].balance += im.quantity;
                         break;
@@ -346,7 +384,7 @@ contract DexSupporter is Ownable {
         uint256 totalLossCount = 0;
 
         // Calculate realized loss
-        for (uint i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; i++) {
             address assetId = data.balances[i].addr;
             uint256 depositedAmount = vault.depositedAmount(data.addr, assetId);
             uint256 loss = 0;
@@ -366,6 +404,7 @@ contract DexSupporter is Ownable {
             totalLossCount
         );
     }
+*/
 
     /**
      * @notice Requires that a root hash is verified.
@@ -373,6 +412,7 @@ contract DexSupporter is Ownable {
      * @param sigs The signatures.
      * @param committee_id The committee ID.
      */
+    /* Not used in beta
     function requireRootVerified(
         bytes32 root,
         uint256[2] memory sigs,
@@ -386,12 +426,20 @@ contract DexSupporter is Ownable {
         );
         require(status, "Data not verified");
     }
-
+*/
     /**
      * @notice Sets the 0xVault contract.
      * @param _vault The address of the 0xVault contract.
      */
     function setVault(address _vault) external onlyOwner {
         vault = IVault(_vault);
+    }
+
+    /**
+     * @notice Sets the 0xLpProvider contract.
+     * @param _LpProvider The address of the 0xLpProvider contract.
+     */
+    function setLpProvider(address _LpProvider) external onlyOwner {
+        LpProvider = ILpProvider(_LpProvider);
     }
 }
