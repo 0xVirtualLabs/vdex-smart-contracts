@@ -232,7 +232,7 @@ contract LpProvider is
     function setLPProvider(
         address[] calldata lpProvider,
         bool[] calldata isProvider
-    ) external {
+    ) external onlyOwner {
         require(lpProvider.length == isProvider.length, "Invalid input");
         for (uint256 i = 0; i < lpProvider.length; i++) {
             isLPProvider[lpProvider[i]] = isProvider[i];
