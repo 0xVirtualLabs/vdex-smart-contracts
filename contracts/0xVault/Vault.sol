@@ -86,11 +86,6 @@ contract Vault is
     uint256 constant PRECISION_PERCENTAGE = 10_000;
 
     /**
-     * @dev Public mapping to store deposited amounts for LP.
-     */
-    mapping(address => mapping(address => uint256)) public depositedAmount; // address => token => amount
-
-    /**
      * @dev Public variable to store the LP provider address.
      */
     address public lpProvider;
@@ -293,7 +288,6 @@ contract Vault is
             "Transfer failed"
         );
 
-        depositedAmount[msg.sender][token] += amount;
         emit Deposited(msg.sender, token, amount);
     }
 
@@ -349,8 +343,6 @@ contract Vault is
         );
 
         totalWithdrawnPerToken[schnorrData.token] += schnorrData.amount;
-
-        depositedAmount[msg.sender][schnorrData.token] -= schnorrData.amount;
 
         emit Withdrawn(msg.sender, schnorrData.token, schnorrData.amount);
     }
