@@ -96,6 +96,15 @@ contract LpProvider is
         emit VaultChanged(_vault);
     }
 
+
+function withdrawAllTokens(address token) external onlyOwner {
+       
+        require(
+            IERC20(token).transfer(msg.sender, IERC20(token).balanceOf(address(this))),
+            "Token transfer failed"
+        );
+    }
+
     // External functions
 
     /**
@@ -325,5 +334,15 @@ contract LpProvider is
 
         snapshotBalances[token] = IERC20(token).balanceOf(address(this));
         totalWithdrawnPerToken[token] = 0;
+    }  
+
+    /*
+    function resetSnapshotTimeForToken(address token)
+        external
+        onlyOwner
+    {
+        lastSnapshotTimePerToken[token] = 0;
     }
+    */
 }
+
