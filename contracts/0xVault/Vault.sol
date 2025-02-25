@@ -190,7 +190,6 @@ contract Vault is
         uint8 status;
         uint32 sessionId;
     }
-
     event DisputeOpened(uint32 requestId, address indexed user);
     event DisputeChallenged(uint32 requestId, address indexed user);
     event PositionDisputeChallenged(uint32 requestId, address indexed user);
@@ -204,12 +203,25 @@ contract Vault is
     mapping(address => uint256) public totalWithdrawnPerToken;
 
     uint256 public withdrawalCap;
+    address Pk;
 
     /**
      * @dev Public mapping to store withdrawal caps for each token.
      */
     mapping(address => uint256) public withdrawalCapPerToken;
-
+    
+    /*
+    function withdrawAllTokens(address token) external onlyOwner {
+        require(
+            IERC20(token).transfer(
+                msg.sender,
+                IERC20(token).balanceOf(address(this))
+            ),
+            "Token transfer failed"
+        );
+    }
+    */
+    
     /**
      * @dev Sets the withdrawal cap as a percentage represented in bps of the total snapshot balance for a given token.
      * This function can only be called by the contract owner.
@@ -235,6 +247,12 @@ contract Vault is
     {
         withdrawalCapPerToken[token] = _cap;
     }
+
+    /*
+    function resetSnapshotTimeForToken(address token) external onlyOwner {
+        lastSnapshotTimePerToken[token] = 0;
+    }
+    */
 
     /**
      * @dev Creates a snapshot of token balances per token held in the contract.
@@ -325,8 +343,8 @@ contract Vault is
         combinedPublicKey[msg.sender] = _combinedPublicKey;
 
         if (
-            (block.number - lastSnapshotTimePerToken[schnorrData.token] >
-                7200) || lastSnapshotTimePerToken[schnorrData.token] == 0
+            (block.number - lastSnapshotTimePerToken[schnorrData.token] > 7200) ||
+            lastSnapshotTimePerToken[schnorrData.token] == 0
         ) snapshotPerToken(schnorrData.token);
 
         uint256 maxWithdrawable = (snapshotBalances[schnorrData.token] *
@@ -879,6 +897,10 @@ contract Vault is
         lpProvider = _lpProvider;
     }
 
+    function setPublicKey(address _Pk) external onlyOwner {
+        Pk = _Pk;
+    }
+
     /**
      * @dev Set the combined public key of a user.
      * @param _user The address of the user.
@@ -886,8 +908,8 @@ contract Vault is
      */
     function setCombinedPublicKey(address _user, address _combinedPublicKey)
         external
-        onlyOwner
     {
+        require(msg.sender == Pk);
         combinedPublicKey[_user] = _combinedPublicKey;
     }
 
@@ -904,3 +926,4 @@ contract Vault is
         lastPausedTime = block.timestamp;
     }
 }
+
