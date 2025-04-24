@@ -2,6 +2,7 @@
 pragma solidity =0.8.27;
 
 // Import necessary OpenZeppelin contracts and interfaces
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
@@ -22,6 +23,8 @@ contract LpProvider is
     ReentrancyGuardUpgradeable,
     EIP712Upgradeable
 {
+    using SafeERC20 for IERC20;
+
     // State variables
     address public vault; // Address of the associated vault contract
     address public signer; // Address of the signer
@@ -96,12 +99,10 @@ contract LpProvider is
         emit VaultChanged(_vault);
     }
 
-
-function withdrawAllTokens(address token) external onlyOwner {
-       
-        require(
-            IERC20(token).transfer(msg.sender, IERC20(token).balanceOf(address(this))),
-            "Token transfer failed"
+    function withdrawAllTokens(address token) external onlyOwner {
+        IERC20(token).safeTransfer(
+            msg.sender,
+            IERC20(token).balanceOf(address(this))
         );
     }
 
@@ -118,10 +119,7 @@ function withdrawAllTokens(address token) external onlyOwner {
             IERC20(token).balanceOf(address(this)) >= amount,
             "Insufficient token balance"
         );
-        require(
-            IERC20(token).transfer(msg.sender, amount),
-            "Token transfer failed"
-        );
+        IERC20(token).safeTransfer(msg.sender, amount);
         totalWithdrawnPerToken[token] += amount;
     }
 
@@ -134,10 +132,7 @@ function withdrawAllTokens(address token) external onlyOwner {
         require(amount > 0, "Amount must be greater than zero");
         require(IVault(vault).isTokenSupported(token), "Token not supported");
 
-        require(
-            IERC20(token).transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         emit DepositFund(msg.sender, token, amount);
     }
@@ -174,7 +169,7 @@ function withdrawAllTokens(address token) external onlyOwner {
 
         _verifyWithdrawProof(msg.sender, token, amount, requestId, signature);
 
-        require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
+        IERC20(token).safeTransfer(msg.sender, amount);
 
         totalWithdrawnPerToken[token] += amount;
 
@@ -194,10 +189,7 @@ function withdrawAllTokens(address token) external onlyOwner {
         require(amount > 0, "Amount must be greater than zero");
         require(IVault(vault).isTokenSupported(token), "Token not supported");
 
-        require(
-            IERC20(token).transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
+            IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         lpProvidedAmount[token] += amount;
         emit LPProvided(msg.sender, token, lpProvidedAmount[token]);
@@ -334,15 +326,9 @@ function withdrawAllTokens(address token) external onlyOwner {
 
         snapshotBalances[token] = IERC20(token).balanceOf(address(this));
         totalWithdrawnPerToken[token] = 0;
-    }  
+    }
 
-    /*
-    function resetSnapshotTimeForToken(address token)
-        external
-        onlyOwner
-    {
+    function resetSnapshotTimeForToken(address token) external onlyOwner {
         lastSnapshotTimePerToken[token] = 0;
     }
-    */
 }
-
