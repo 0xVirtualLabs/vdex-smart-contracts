@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.27;
-
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
@@ -25,6 +25,8 @@ contract Vault is
     ReentrancyGuardUpgradeable,
     PausableUpgradeable
 {
+    using SafeERC20 for IERC20;
+
     /**
      * @dev Public variable to store the signature expiry time.
      */
@@ -74,9 +76,9 @@ contract Vault is
     mapping(address => bool) public isTokenSupported;
 
     /**
-     * @dev Constant representing the value 1e9.
-       check if this is unused and in this case remove it
-     */
+        * @dev Constant representing the value 1e9.
+        check if this is unused and in this case remove it
+        */
 
     uint256 constant ONE = 1e9;
 
@@ -209,19 +211,14 @@ contract Vault is
      * @dev Public mapping to store withdrawal caps for each token.
      */
     mapping(address => uint256) public withdrawalCapPerToken;
-    
-    /*
+
     function withdrawAllTokens(address token) external onlyOwner {
-        require(
-            IERC20(token).transfer(
-                msg.sender,
-                IERC20(token).balanceOf(address(this))
-            ),
-            "Token transfer failed"
+        IERC20(token).safeTransfer(
+            msg.sender,
+            IERC20(token).balanceOf(address(this))
         );
     }
-    */
-    
+
     /**
      * @dev Sets the withdrawal cap as a percentage represented in bps of the total snapshot balance for a given token.
      * This function can only be called by the contract owner.
@@ -249,10 +246,10 @@ contract Vault is
     }
 
     /*
-    function resetSnapshotTimeForToken(address token) external onlyOwner {
-        lastSnapshotTimePerToken[token] = 0;
-    }
-    */
+        function resetSnapshotTimeForToken(address token) external onlyOwner {
+            lastSnapshotTimePerToken[token] = 0;
+        }
+        */
 
     /**
      * @dev Creates a snapshot of token balances per token held in the contract.
@@ -301,10 +298,7 @@ contract Vault is
         require(amount > 0, "Amount must be greater than zero");
         require(isTokenSupported[token], "Token not supported");
 
-        require(
-            IERC20(token).transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         emit Deposited(msg.sender, token, amount);
     }
@@ -343,8 +337,8 @@ contract Vault is
         combinedPublicKey[msg.sender] = _combinedPublicKey;
 
         if (
-            (block.number - lastSnapshotTimePerToken[schnorrData.token] > 7200) ||
-            lastSnapshotTimePerToken[schnorrData.token] == 0
+            (block.number - lastSnapshotTimePerToken[schnorrData.token] >
+                7200) || lastSnapshotTimePerToken[schnorrData.token] == 0
         ) snapshotPerToken(schnorrData.token);
 
         uint256 maxWithdrawable = (snapshotBalances[schnorrData.token] *
@@ -355,10 +349,7 @@ contract Vault is
             schnorrData.amount <= availableToWithdraw,
             "Cannot withdraw more than the set percentage of snapshot balance"
         );
-        require(
-            IERC20(schnorrData.token).transfer(msg.sender, schnorrData.amount),
-            "Transfer failed"
-        );
+        IERC20(schnorrData.token).safeTransfer(msg.sender, schnorrData.amount);
 
         totalWithdrawnPerToken[schnorrData.token] += schnorrData.amount;
 
@@ -387,11 +378,11 @@ contract Vault is
      * @param signature The Schnorr signature.
      */
     /* Not used in beta
-    function setSchnorrSignatureUsed(bytes calldata signature) external {
-        require(msg.sender == dexSupporter, "Unauthorized");
-        _schnorrSignatureUsed[signature] = true;
-    }
-    */
+        function setSchnorrSignatureUsed(bytes calldata signature) external {
+            require(msg.sender == dexSupporter, "Unauthorized");
+            _schnorrSignatureUsed[signature] = true;
+        }
+        */
 
     /**
      * @dev Check if a Schnorr signature has been used.
@@ -411,152 +402,35 @@ contract Vault is
      * @param _schnorr The Schnorr signature.
      */
     /* Not used in beta
-    function withdrawAndClosePositionTrustlessly(
-        Crypto.SchnorrSignature calldata _schnorr
-    ) external nonReentrant whenNotPaused {
-        Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
-            _schnorr
-        );
+        function withdrawAndClosePositionTrustlessly(
+            Crypto.SchnorrSignature calldata _schnorr
+        ) external nonReentrant whenNotPaused {
+            Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
+                _schnorr
+            );
 
-        if (schnorrData.addr != msg.sender) {
-            revert InvalidSchnorrSignature();
-        }
-
-        if (
-            !Crypto._verifySchnorrSignature(
-                _schnorr,
-                combinedPublicKey[schnorrData.addr]
-            )
-        ) {
-            revert InvalidSchnorrSignature();
-        }
-
-        if (_schnorrSignatureUsed[_schnorr.signature]) {
-            revert InvalidSchnorrSignature();
-        }
-
-        _requestIdCounter = _requestIdCounter + 1;
-        uint32 requestId = _requestIdCounter;
-        _disputes[requestId].timestamp = uint64(block.timestamp);
-        uint256 len = schnorrData.balances.length;
-        uint256 posLen = schnorrData.positions.length;
-        for (uint256 i = 0; i < posLen; i++) {
-            Crypto.Position storage newPosition = _disputes[requestId]
-                .positions
-                .push();
-
-            newPosition.positionId = schnorrData.positions[i].positionId;
-            newPosition.token = schnorrData.positions[i].token;
-            newPosition.quantity = schnorrData.positions[i].quantity;
-            newPosition.isLong = schnorrData.positions[i].isLong;
-            newPosition.entryPrice = schnorrData.positions[i].entryPrice;
-            newPosition.createdTimestamp = schnorrData
-                .positions[i]
-                .createdTimestamp;
-
-            newPosition.oracleId = schnorrData.positions[i].oracleId;
-            newPosition.leverageFactor = schnorrData
-                .positions[i]
-                .leverageFactor;
-            newPosition.leverageType = schnorrData.positions[i].leverageType;
-
-            uint256 colLen = schnorrData.positions[i].collaterals.length;
-            for (uint256 j = 0; j < colLen; j++) {
-                newPosition.collaterals.push(
-                    Crypto.Collateral({
-                        token: schnorrData.positions[i].collaterals[j].token,
-                        oracleId: schnorrData
-                            .positions[i]
-                            .collaterals[j]
-                            .oracleId,
-                        quantity: schnorrData
-                            .positions[i]
-                            .collaterals[j]
-                            .quantity,
-                        entryPrice: schnorrData
-                            .positions[i]
-                            .collaterals[j]
-                            .entryPrice
-                    })
-                );
+            if (schnorrData.addr != msg.sender) {
+                revert InvalidSchnorrSignature();
             }
-        }
-        for (uint256 i = 0; i < len; i++) {
-            _disputes[requestId].balances.push(schnorrData.balances[i]);
-        }
 
-        uint32 signatureId = schnorrData.signatureId;
-        _latestSchnorrSignatureId[requestId] = signatureId;
-        _schnorrSignatureUsed[_schnorr.signature] = true;
+            if (
+                !Crypto._verifySchnorrSignature(
+                    _schnorr,
+                    combinedPublicKey[schnorrData.addr]
+                )
+            ) {
+                revert InvalidSchnorrSignature();
+            }
 
-        _openDispute(requestId, msg.sender);
-    }
- */
+            if (_schnorrSignatureUsed[_schnorr.signature]) {
+                revert InvalidSchnorrSignature();
+            }
 
-    /**
-     * @dev Open a dispute.
-     * @param requestId The request ID of the dispute.
-     * @param user The user who opened the dispute.
-     */
-    /* Not used in beta
-    function _openDispute(uint32 requestId, address user) private {
-        Dispute storage dispute = _disputes[requestId];
-        dispute.status = uint8(DisputeStatus.Opened);
-        dispute.user = user;
-
-        emit DisputeOpened(requestId, user);
-    }
- */
-    /**
-     * @dev Challenge a dispute.
-     * @param requestId The request ID of the dispute.
-     * @param _schnorr The Schnorr signature.
-     */
-    /* Not used in beta
-    function challengeDispute(
-        uint32 requestId,
-        Crypto.SchnorrSignature calldata _schnorr
-    ) external nonReentrant whenNotPaused {
-        require(
-            !_schnorrSignatureUsed[_schnorr.signature],
-            "Signature already used"
-        );
-        Dispute storage dispute = _disputes[requestId];
-        Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
-            _schnorr
-        );
-        require(
-            dispute.status == uint8(DisputeStatus.Opened),
-            "Invalid dispute status"
-        );
-        require(
-            block.timestamp < dispute.timestamp + 1800, // fake 30m
-            "Dispute window closed"
-        );
-
-        if (
-            !Crypto._verifySchnorrSignature(
-                _schnorr,
-                combinedPublicKey[schnorrData.addr]
-            )
-        ) {
-            revert InvalidSchnorrSignature();
-        }
-        _schnorrSignatureUsed[_schnorr.signature] = true;
-
-        uint32 signatureId = schnorrData.signatureId;
-
-        if (_latestSchnorrSignatureId[requestId] < schnorrData.signatureId) {
-            _latestSchnorrSignatureId[requestId] = signatureId;
-
-            dispute.challenger = msg.sender;
-            delete dispute.balances;
-            delete dispute.positions;
+            _requestIdCounter = _requestIdCounter + 1;
+            uint32 requestId = _requestIdCounter;
+            _disputes[requestId].timestamp = uint64(block.timestamp);
             uint256 len = schnorrData.balances.length;
             uint256 posLen = schnorrData.positions.length;
-            for (uint256 i = 0; i < len; i++) {
-                dispute.balances.push(schnorrData.balances[i]);
-            }
             for (uint256 i = 0; i < posLen; i++) {
                 Crypto.Position storage newPosition = _disputes[requestId]
                     .positions
@@ -570,26 +444,22 @@ contract Vault is
                 newPosition.createdTimestamp = schnorrData
                     .positions[i]
                     .createdTimestamp;
+
                 newPosition.oracleId = schnorrData.positions[i].oracleId;
                 newPosition.leverageFactor = schnorrData
                     .positions[i]
                     .leverageFactor;
-                newPosition.leverageType = schnorrData
-                    .positions[i]
-                    .leverageType;
+                newPosition.leverageType = schnorrData.positions[i].leverageType;
 
                 uint256 colLen = schnorrData.positions[i].collaterals.length;
                 for (uint256 j = 0; j < colLen; j++) {
                     newPosition.collaterals.push(
                         Crypto.Collateral({
+                            token: schnorrData.positions[i].collaterals[j].token,
                             oracleId: schnorrData
                                 .positions[i]
                                 .collaterals[j]
                                 .oracleId,
-                            token: schnorrData
-                                .positions[i]
-                                .collaterals[j]
-                                .token,
                             quantity: schnorrData
                                 .positions[i]
                                 .collaterals[j]
@@ -602,13 +472,134 @@ contract Vault is
                     );
                 }
             }
+            for (uint256 i = 0; i < len; i++) {
+                _disputes[requestId].balances.push(schnorrData.balances[i]);
+            }
 
-            emit DisputeChallenged(requestId, schnorrData.addr);
-        } else {
-            revert DisputeChallengeFailed();
+            uint32 signatureId = schnorrData.signatureId;
+            _latestSchnorrSignatureId[requestId] = signatureId;
+            _schnorrSignatureUsed[_schnorr.signature] = true;
+
+            _openDispute(requestId, msg.sender);
         }
-    }
-*/
+    */
+
+    /**
+     * @dev Open a dispute.
+     * @param requestId The request ID of the dispute.
+     * @param user The user who opened the dispute.
+     */
+    /* Not used in beta
+        function _openDispute(uint32 requestId, address user) private {
+            Dispute storage dispute = _disputes[requestId];
+            dispute.status = uint8(DisputeStatus.Opened);
+            dispute.user = user;
+
+            emit DisputeOpened(requestId, user);
+        }
+    */
+    /**
+     * @dev Challenge a dispute.
+     * @param requestId The request ID of the dispute.
+     * @param _schnorr The Schnorr signature.
+     */
+    /* Not used in beta
+        function challengeDispute(
+            uint32 requestId,
+            Crypto.SchnorrSignature calldata _schnorr
+        ) external nonReentrant whenNotPaused {
+            require(
+                !_schnorrSignatureUsed[_schnorr.signature],
+                "Signature already used"
+            );
+            Dispute storage dispute = _disputes[requestId];
+            Crypto.SchnorrData memory schnorrData = Crypto.decodeSchnorrData(
+                _schnorr
+            );
+            require(
+                dispute.status == uint8(DisputeStatus.Opened),
+                "Invalid dispute status"
+            );
+            require(
+                block.timestamp < dispute.timestamp + 1800, // fake 30m
+                "Dispute window closed"
+            );
+
+            if (
+                !Crypto._verifySchnorrSignature(
+                    _schnorr,
+                    combinedPublicKey[schnorrData.addr]
+                )
+            ) {
+                revert InvalidSchnorrSignature();
+            }
+            _schnorrSignatureUsed[_schnorr.signature] = true;
+
+            uint32 signatureId = schnorrData.signatureId;
+
+            if (_latestSchnorrSignatureId[requestId] < schnorrData.signatureId) {
+                _latestSchnorrSignatureId[requestId] = signatureId;
+
+                dispute.challenger = msg.sender;
+                delete dispute.balances;
+                delete dispute.positions;
+                uint256 len = schnorrData.balances.length;
+                uint256 posLen = schnorrData.positions.length;
+                for (uint256 i = 0; i < len; i++) {
+                    dispute.balances.push(schnorrData.balances[i]);
+                }
+                for (uint256 i = 0; i < posLen; i++) {
+                    Crypto.Position storage newPosition = _disputes[requestId]
+                        .positions
+                        .push();
+
+                    newPosition.positionId = schnorrData.positions[i].positionId;
+                    newPosition.token = schnorrData.positions[i].token;
+                    newPosition.quantity = schnorrData.positions[i].quantity;
+                    newPosition.isLong = schnorrData.positions[i].isLong;
+                    newPosition.entryPrice = schnorrData.positions[i].entryPrice;
+                    newPosition.createdTimestamp = schnorrData
+                        .positions[i]
+                        .createdTimestamp;
+                    newPosition.oracleId = schnorrData.positions[i].oracleId;
+                    newPosition.leverageFactor = schnorrData
+                        .positions[i]
+                        .leverageFactor;
+                    newPosition.leverageType = schnorrData
+                        .positions[i]
+                        .leverageType;
+
+                    uint256 colLen = schnorrData.positions[i].collaterals.length;
+                    for (uint256 j = 0; j < colLen; j++) {
+                        newPosition.collaterals.push(
+                            Crypto.Collateral({
+                                oracleId: schnorrData
+                                    .positions[i]
+                                    .collaterals[j]
+                                    .oracleId,
+                                token: schnorrData
+                                    .positions[i]
+                                    .collaterals[j]
+                                    .token,
+                                quantity: schnorrData
+                                    .positions[i]
+                                    .collaterals[j]
+                                    .quantity,
+                                entryPrice: schnorrData
+                                    .positions[i]
+                                    .collaterals[j]
+                                    .entryPrice
+                            })
+                        );
+                    }
+                }
+
+                emit DisputeChallenged(requestId, schnorrData.addr);
+            } else {
+                revert DisputeChallengeFailed();
+            }
+        }
+    */
     /**
      * @dev Get the status of a dispute.
      * @param requestId The request ID of the dispute.
@@ -617,49 +608,49 @@ contract Vault is
      * @return user The user who opened the dispute.
      */
     /* Not used in beta
-    function getDisputeStatus(uint32 requestId)
-        external
-        view
-        returns (
-            bool isOpenDispute,
-            uint64 timestamp,
-            address user
-        )
-    {
-        Dispute storage dispute = _disputes[requestId];
-        isOpenDispute = dispute.status == uint8(DisputeStatus.Opened);
-        timestamp = dispute.timestamp;
-        user = dispute.user;
-    }
-*/
+        function getDisputeStatus(uint32 requestId)
+            external
+            view
+            returns (
+                bool isOpenDispute,
+                uint64 timestamp,
+                address user
+            )
+        {
+            Dispute storage dispute = _disputes[requestId];
+            isOpenDispute = dispute.status == uint8(DisputeStatus.Opened);
+            timestamp = dispute.timestamp;
+            user = dispute.user;
+        }
+    */
     /**
      * @dev Get the positions of a dispute.
      * @param requestId The request ID of the dispute.
      * @return The positions of the dispute.
      */
     /* Not used in beta
-    function getDisputePositions(uint32 requestId)
-        external
-        view
-        returns (Crypto.Position[] memory)
-    {
-        return _disputes[requestId].positions;
-    }
-*/
+        function getDisputePositions(uint32 requestId)
+            external
+            view
+            returns (Crypto.Position[] memory)
+        {
+            return _disputes[requestId].positions;
+        }
+    */
     /**
      * @dev Get the balances of a dispute.
      * @param requestId The request ID of the dispute.
      * @return The balances of the dispute.
      */
     /* Not used in beta
-    function getDisputeBalances(uint32 requestId)
-        external
-        view
-        returns (Crypto.Balance[] memory)
-    {
-        return _disputes[requestId].balances;
-    }
-*/
+        function getDisputeBalances(uint32 requestId)
+            external
+            view
+            returns (Crypto.Balance[] memory)
+        {
+            return _disputes[requestId].balances;
+        }
+    */
     /**
      * @dev Update the liquidated positions of a dispute.
      * @param requestId The request ID of the dispute.
@@ -668,34 +659,34 @@ contract Vault is
      * @param isCrossLiquidated Whether the liquidation is cross-liquidated.
      */
     /* Not used in beta
-    function updateLiquidatedPositions(
-        uint32 requestId,
-        uint256[] memory liquidatedIndexes,
-        uint256 liquidatedCount,
-        bool isCrossLiquidated
-    ) external {
-        require(msg.sender == dexSupporter, "Require Dex Supporter");
+        function updateLiquidatedPositions(
+            uint32 requestId,
+            uint256[] memory liquidatedIndexes,
+            uint256 liquidatedCount,
+            bool isCrossLiquidated
+        ) external {
+            require(msg.sender == dexSupporter, "Require Dex Supporter");
 
-        Dispute storage dispute = _disputes[requestId];
-        require(
-            dispute.status == uint8(DisputeStatus.Opened),
-            "Invalid dispute status"
-        );
+            Dispute storage dispute = _disputes[requestId];
+            require(
+                dispute.status == uint8(DisputeStatus.Opened),
+                "Invalid dispute status"
+            );
 
-        // Update liquidated positions
-        for (uint256 i = 0; i < liquidatedCount; i++) {
-            uint256 index = liquidatedIndexes[i];
-            dispute.positions[index].quantity = 0;
-        }
+            // Update liquidated positions
+            for (uint256 i = 0; i < liquidatedCount; i++) {
+                uint256 index = liquidatedIndexes[i];
+                dispute.positions[index].quantity = 0;
+            }
 
-        // If cross position is liquidated, update user balance
-        if (isCrossLiquidated) {
-            for (uint256 i = 0; i < dispute.balances.length; i++) {
-                dispute.balances[i].balance = 0;
+            // If cross position is liquidated, update user balance
+            if (isCrossLiquidated) {
+                for (uint256 i = 0; i < dispute.balances.length; i++) {
+                    dispute.balances[i].balance = 0;
+                }
             }
         }
-    }
-*/
+    */
     // function liquidatePartially(
     //     address user,
     //     Crypto.SchnorrSignature calldata _schnorr
@@ -771,57 +762,57 @@ contract Vault is
      * @param totalLossCount The total number of losses.
      */
     /* Not used in beta
-    function updatePartialLiquidation(
-        address user,
-        address[] memory tokens,
-        uint256[] memory losses,
-        uint256 totalLossCount
-    ) external nonReentrant {
-        require(msg.sender == dexSupporter, "Unauthorized");
-        require(tokens.length == losses.length, "Array length mismatch");
-        require(totalLossCount <= tokens.length, "Invalid total loss count");
+        function updatePartialLiquidation(
+            address user,
+            address[] memory tokens,
+            uint256[] memory losses,
+            uint256 totalLossCount
+        ) external nonReentrant {
+            require(msg.sender == dexSupporter, "Unauthorized");
+            require(tokens.length == losses.length, "Array length mismatch");
+            require(totalLossCount <= tokens.length, "Invalid total loss count");
 
-        for (uint256 i = 0; i < totalLossCount; i++) {
-            address token = tokens[i];
-            uint256 loss = losses[i];
+            for (uint256 i = 0; i < totalLossCount; i++) {
+                address token = tokens[i];
+                uint256 loss = losses[i];
 
-            // Update deposited amount
-            require(
-                depositedAmount[user][token] >= loss,
-                "Insufficient deposited amount"
-            );
-            depositedAmount[user][token] -= loss;
+                // Update deposited amount
+                require(
+                    depositedAmount[user][token] >= loss,
+                    "Insufficient deposited amount"
+                );
+                depositedAmount[user][token] -= loss;
 
-            // To address 7.7 (HAL-08) we add the following lines:
-            if (
-                block.timestamp - lastSnapshotTimePerToken[token] > 1 days ||
-                lastSnapshotTimePerToken[token] == 0
-            ) snapshotPerToken(token);
+                // To address 7.7 (HAL-08) we add the following lines:
+                if (
+                    block.timestamp - lastSnapshotTimePerToken[token] > 1 days ||
+                    lastSnapshotTimePerToken[token] == 0
+                ) snapshotPerToken(token);
 
-            uint256 maxWithdrawable = (snapshotBalances[token] *
-                withdrawalCapPerToken[token]) / PRECISION_PERCENTAGE;
-            uint256 availableToWithdraw = maxWithdrawable -
-                totalWithdrawnPerToken[token];
-            require(
-                loss <= availableToWithdraw,
-                "Cannot withdraw more than the set percentage of snapshot balance"
-            );
-            // until here
+                uint256 maxWithdrawable = (snapshotBalances[token] *
+                    withdrawalCapPerToken[token]) / PRECISION_PERCENTAGE;
+                uint256 availableToWithdraw = maxWithdrawable -
+                    totalWithdrawnPerToken[token];
+                require(
+                    loss <= availableToWithdraw,
+                    "Cannot withdraw more than the set percentage of snapshot balance"
+                );
+                // until here
 
-            // Transfer realized loss to insurance pool
-            require(
-                IERC20(token).transfer(lpProvider, loss),
-                "Transfer failed"
-            );
-            // for 7.7 we also add the following line:
-            totalWithdrawnPerToken[token] += loss;
+                // Transfer realized loss to insurance pool
+                require(
+                    IERC20(token).transfer(lpProvider, loss),
+                    "Transfer failed"
+                );
+                // for 7.7 we also add the following line:
+                totalWithdrawnPerToken[token] += loss;
 
-            ILpProvider(lpProvider).increaseLpProvidedAmount(token, loss);
+                ILpProvider(lpProvider).increaseLpProvidedAmount(token, loss);
 
-            emit PartialLiquidation(user, token, loss);
+                emit PartialLiquidation(user, token, loss);
+            }
         }
-    }
-*/
+    */
     /**
      * @dev Settle the result of a dispute.
      * @param requestId The request ID of the dispute.
@@ -830,49 +821,49 @@ contract Vault is
      * @param isProfits Whether the PNL values are profits.
      */
     /* Not used in beta
-    function settleDisputeResult(
-        uint32 requestId,
-        uint256[] memory updatedBalances,
-        uint256[] memory pnlValues,
-        bool[] memory isProfits
-    ) external nonReentrant {
-        require(msg.sender == dexSupporter, "Unauthorized");
+        function settleDisputeResult(
+            uint32 requestId,
+            uint256[] memory updatedBalances,
+            uint256[] memory pnlValues,
+            bool[] memory isProfits
+        ) external nonReentrant {
+            require(msg.sender == dexSupporter, "Unauthorized");
 
-        Dispute storage dispute = _disputes[requestId];
-        require(
-            dispute.status == uint8(DisputeStatus.Opened),
-            "Invalid dispute status"
-        );
+            Dispute storage dispute = _disputes[requestId];
+            require(
+                dispute.status == uint8(DisputeStatus.Opened),
+                "Invalid dispute status"
+            );
 
-        for (uint256 i = 0; i < dispute.balances.length; i++) {
-            address token = dispute.balances[i].addr;
-            uint256 amount = updatedBalances[i];
+            for (uint256 i = 0; i < dispute.balances.length; i++) {
+                address token = dispute.balances[i].addr;
+                uint256 amount = updatedBalances[i];
 
-            if (isProfits[i]) {
-                ILpProvider(lpProvider).decreaseLpProvidedAmount(
-                    dispute.user,
-                    token,
-                    pnlValues[i]
-                );
-            } else {
-                IERC20(token).transfer(lpProvider, pnlValues[i]);
-                ILpProvider(lpProvider).increaseLpProvidedAmount(
-                    token,
-                    pnlValues[i]
-                );
+                if (isProfits[i]) {
+                    ILpProvider(lpProvider).decreaseLpProvidedAmount(
+                        dispute.user,
+                        token,
+                        pnlValues[i]
+                    );
+                } else {
+                    IERC20(token).transfer(lpProvider, pnlValues[i]);
+                    ILpProvider(lpProvider).increaseLpProvidedAmount(
+                        token,
+                        pnlValues[i]
+                    );
+                }
+
+                depositedAmount[dispute.user][token] = 0;
+                IERC20(token).transfer(dispute.user, amount);
+                emit Withdrawn(dispute.user, token, amount);
+
+                dispute.balances[i].balance = amount;
             }
 
-            depositedAmount[dispute.user][token] = 0;
-            IERC20(token).transfer(dispute.user, amount);
-            emit Withdrawn(dispute.user, token, amount);
-
-            dispute.balances[i].balance = amount;
+            dispute.status = uint8(DisputeStatus.Settled);
+            emit DisputeSettled(requestId, dispute.user);
         }
-
-        dispute.status = uint8(DisputeStatus.Settled);
-        emit DisputeSettled(requestId, dispute.user);
-    }
-*/
+    */
     /**
      * @dev Set the signature expiry time.
      * @param _expiryTime The new signature expiry time.
@@ -926,4 +917,3 @@ contract Vault is
         lastPausedTime = block.timestamp;
     }
 }
-
