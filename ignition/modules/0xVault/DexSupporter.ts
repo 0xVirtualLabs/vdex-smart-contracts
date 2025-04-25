@@ -1,38 +1,45 @@
-import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
-import LpProviderModule from "./LpProvider";
-import vaultProxyModule from "./Proxy";
+import { buildModule } from '@nomicfoundation/hardhat-ignition/modules';
+import LpProviderModule from './LpProvider';
+import vaultProxyModule from './Proxy';
 
 /**
  * This is the second module that will be run, and it is also the only module exported from this file.
  * It creates a contract instance for the Vault contract using the proxy from the previous module.
  */
-const DexSupporterModule = buildModule("DexSupporterModule", (m) => {
+const DexSupporterModule = buildModule('DexSupporterModule', (m) => {
   // Get the proxy and proxy admin from the previous module.
 
-  const Dex = m.library("Dex");
-  const Crypto = m.library("Crypto");
-  const SupraOracleDecoder = m.library("SupraOracleDecoder");
+  const Dex = m.library('Dex');
+  const Crypto = m.library('Crypto');
+  const SupraOracleDecoder = m.library('SupraOracleDecoder');
 
   const { vault } = m.useModule(vaultProxyModule);
 
   const { lpProvider } = m.useModule(LpProviderModule);
+  const initialOwner =
+    process.env.INITIAL_OWNER || '0xEa496BD93dD9206cC0b952f71D78e7400D9AB794';
 
   // //sepolia
   // "0x6Cd59830AAD978446e6cc7f6cc173aF7656Fb917", // supra verifier
   // "0x131918bC49Bb7de74aC7e19d61A01544242dAA80", // supra pull oracle
+
+  // bitlayer testnet
+  // 0xaa2f56843cec7840f0c106f0202313d8d8cb13d6 // supra verifier
+  // 0x30484f27c5191A34587007aD380049d54DbCfAE7 // supra pull oracle
   const dexSupporter = m.contract(
-    "DexSupporter",
+    'DexSupporter',
     [
       vault,
-      "0xaa2f56843cec7840f0c106f0202313d8d8cb13d6", // supra verifier
-      "0x30484f27c5191A34587007aD380049d54DbCfAE7", // supra pull oracle
+      '0x6Cd59830AAD978446e6cc7f6cc173aF7656Fb917', // supra verifier
+      '0x131918bC49Bb7de74aC7e19d61A01544242dAA80', // supra pull oracle
       lpProvider,
+      initialOwner,
     ],
     {
       libraries: {
-        Dex: Dex,
-        Crypto: Crypto,
-        SupraOracleDecoder: SupraOracleDecoder,
+        // Dex: Dex,
+        // Crypto: Crypto,
+        // SupraOracleDecoder: SupraOracleDecoder,
       },
     }
   );

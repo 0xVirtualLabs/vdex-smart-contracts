@@ -1,26 +1,26 @@
-import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
-import LpProviderModule from "./LpProvider";
-import DexSupporterModule from "./DexSupporter";
+import { buildModule } from '@nomicfoundation/hardhat-ignition/modules';
+import LpProviderModule from './LpProvider';
+import DexSupporterModule from './DexSupporter';
 
 /**
  * This is the first module that will be run. It deploys the proxy and the
  * proxy admin, and returns them so that they can be used by other modules.
  */
-const proxyModule = buildModule("ProxyModule", (m) => {
+const proxyModule = buildModule('ProxyModule', (m) => {
   // This address is the owner of the ProxyAdmin contract,
   // so it will be the only account that can upgrade the proxy when needed.
 
   const proxyAdminOwner = m.getAccount(0);
-  console.log("🚀 ~ proxyModule ~ proxyAdminOwner:", proxyAdminOwner);
+  console.log('🚀 ~ proxyModule ~ proxyAdminOwner:', proxyAdminOwner);
 
-  const proxyAdmin = m.contract("ProxyAdmin", []);
+  const proxyAdmin = m.contract('ProxyAdmin', [proxyAdminOwner]);
   // This is our contract that will be proxied.
   // We will upgrade this contract with a new version later.
-  const crypto = m.library("Crypto");
+  const crypto = m.library('Crypto');
   // const dex = m.library("Dex");
   // const supraOracleDecoder = m.library("SupraOracleDecoder");
 
-  const vault = m.contract("Vault", [], {
+  const vault = m.contract('Vault', [], {
     libraries: {
       Crypto: crypto,
       // Dex: dex,
@@ -33,19 +33,14 @@ const proxyModule = buildModule("ProxyModule", (m) => {
   // https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.0.1/contracts/proxy/transparent/TransparentUpgradeableProxy.sol
   const initializeData = m.encodeFunctionCall(
     vault,
-    "initialize",
-    [
-      proxyAdminOwner,
-      3600,
-      proxyAdminOwner,
-      proxyAdminOwner,
-    ],
+    'initialize',
+    [proxyAdminOwner, 3600, proxyAdminOwner, proxyAdminOwner],
     {
-      id: "TProxyForVault",
+      id: 'TProxyForVault',
     }
   );
 
-  const proxy = m.contract("TransparentUpgradeableProxy", [
+  const proxy = m.contract('TransparentUpgradeableProxy', [
     vault,
     proxyAdmin,
     initializeData,
@@ -59,7 +54,7 @@ const proxyModule = buildModule("ProxyModule", (m) => {
  * This is the second module that will be run, and it is also the only module exported from this file.
  * It creates a contract instance for the Demo contract using the proxy from the previous module.
  */
-const vaultProxyModule = buildModule("VaultProxyModule", (m) => {
+const vaultProxyModule = buildModule('VaultProxyModule', (m) => {
   // Get the proxy and proxy admin from the previous module.
   const { proxy, proxyAdmin } = m.useModule(proxyModule);
 
@@ -67,7 +62,7 @@ const vaultProxyModule = buildModule("VaultProxyModule", (m) => {
   // While we're still using it to create a contract instance, we're now telling Hardhat Ignition
   // to treat the contract at the proxy address as an instance of the Demo contract.
   // This allows us to interact with the underlying Demo contract via the proxy from within tests and scripts.
-  const vault = m.contractAt("Vault", proxy);
+  const vault = m.contractAt('Vault', proxy);
 
   // Return the contract instance, along with the original proxy and proxyAdmin contracts
   // so that they can be used by other modules, or in tests and scripts.
