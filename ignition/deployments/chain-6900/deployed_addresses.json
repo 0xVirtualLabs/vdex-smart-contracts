@@ -1,0 +1,14 @@
+{
+  "ProxyModule#Crypto": "0x65A07ae9c73E1B8b7dd0eD4CC5D062d9c612f843",
+  "ProxyModule#ProxyAdmin": "0xaB3605A6C03761c7dc11220Fbd473a888781B836",
+  "ProxyModule#Vault": "0x3eD054785a47Ec804FfBe759E851e189916EBcfb",
+  "ProxyModule#TransparentUpgradeableProxy": "0x04E45E666d62e826c489f285aE0CD68127EC301d",
+  "VaultProxyModule#Vault": "0x04E45E666d62e826c489f285aE0CD68127EC301d",
+  "ProxyModule#LpProvider": "0x9610bAeDc483B3d1a8724AEffeC2D2F5F6722120",
+  "ProxyModule#TProxyForLPProvider": "0xbd6972E13f5D6511B879AC6ED2A7C9fb66E0e4E3",
+  "LpProviderModule#LpProvider": "0xbd6972E13f5D6511B879AC6ED2A7C9fb66E0e4E3",
+  "DexSupporterModule#Crypto": "0xf21942e983b805F3f9F71fb89b3797cfBeaaB6a0",
+  "DexSupporterModule#Dex": "0x121Af07b1C9571Cf84d53884944e7E3E6ff5a5c4",
+  "DexSupporterModule#DexSupporter": "0x047860a61b8C9776A708B32873F805624201a722",
+  "DexSupporterModule#SupraOracleDecoder": "0xDd7e05a4Ad4B3A68239Ef29d3DE5390793476ab7"
+}
