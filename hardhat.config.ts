@@ -22,6 +22,8 @@ const chainIds = {
   seidevnet: 713715,
   nibirutestnet: 6911,
   nibirumainnet: 6900,
+  arbitrumtestnet: 421614,
+  arbitrummainnet: 42161,
 };
 
 // Ensure that we have all the environment variables we need.
@@ -64,6 +66,12 @@ function getChainConfig(network: keyof typeof chainIds): NetworkUserConfig {
   if (network === 'seidevnet') {
     url = 'https://evm-rpc.arctic-1.seinetwork.io';
   }
+  if (network === 'arbitrumtestnet') {
+    url = 'https://sepolia-rollup.arbitrum.io/rpc';
+  }
+  if (network === 'arbitrummainnet') {
+    url = 'https://arb1.arbitrum.io/rpc';
+  }
   return {
     accounts: [`0x${deployerPrivateKey}`],
     chainId: chainIds[network],
@@ -105,34 +113,34 @@ const config: any = {
     seidevnet: getChainConfig('seidevnet'),
     nibirutestnet: getChainConfig('nibirutestnet'),
     nibirumainnet: getChainConfig('nibirumainnet'),
+    arbitrumSepolia: getChainConfig('arbitrumtestnet'),
+    arbitrummainnet: getChainConfig('arbitrummainnet'),
   },
   etherscan: {
     // Your API key for Etherscan
-    apiKey: {
-      nibirutestnet: 'nibirutestnet',
-      nibirumainnet: 'nibirumainnet',
-    },
+    apiKey: "SKWZBKQSXE4856HD8AY99542WBNG32H1VE",
     customChains: [
       {
-        network: 'nibirutestnet',
-        chainId: 6911,
+        network: "arbitrumSepolia",
+        chainId: 421614,
         urls: {
-          apiURL:
-            'https://api.routescan.io/v2/network/testnet/evm/6911/etherscan',
-          browserURL: 'https://testnet.nibiscan.io',
-        },
+          apiURL: "https://api.etherscan.io/v2/api?chainid=421614",
+          browserURL: "https://sepolia.arbiscan.io"
+        }
       },
       {
-        network: 'nibirumainnet',
-        chainId: 6900,
+        network: "arbitrummainnet",
+        chainId: 42161,
         urls: {
-          apiURL:
-            'https://api.routescan.io/v2/network/mainnet/evm/6900/etherscan',
-          browserURL: 'https://nibiscan.io',
-        },
-      },
+          apiURL: "https://api.etherscan.io/v2/api?chainid=42161",
+          browserURL: "https://arbiscan.io"
+        }
+      }
     ],
   },
+  // sourcify: {
+  //   enabled: true
+  // },
   paths: {
     artifacts: './artifacts',
     cache: './cache',
