@@ -212,6 +212,8 @@ contract Vault is
      */
     mapping(address => uint256) public withdrawalCapPerToken;
 
+    uint256 public snapshotBlockInterval;
+
     function withdrawAllTokens(address token) external onlyOwner {
         IERC20(token).safeTransfer(
             msg.sender,
@@ -338,7 +340,7 @@ contract Vault is
 
         if (
             (block.number - lastSnapshotTimePerToken[schnorrData.token] >
-                7200) || lastSnapshotTimePerToken[schnorrData.token] == 0
+                snapshotBlockInterval) || lastSnapshotTimePerToken[schnorrData.token] == 0
         ) snapshotPerToken(schnorrData.token);
 
         uint256 maxWithdrawable = (snapshotBalances[schnorrData.token] *
@@ -915,5 +917,10 @@ contract Vault is
     function unpause() external onlyOwner {
         _unpause();
         lastPausedTime = block.timestamp;
+    }
+
+    function setSnapshotBlockInterval(uint256 _interval) external onlyOwner {
+        require(_interval > 0, "Invalid interval");
+        snapshotBlockInterval = _interval;
     }
 }
