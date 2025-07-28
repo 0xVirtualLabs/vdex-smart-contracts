@@ -4,6 +4,8 @@ import { config as dotenvConfig } from 'dotenv';
 import 'hardhat-contract-sizer';
 import { NetworkUserConfig } from 'hardhat/types';
 import 'solidity-docgen';
+import '@nomiclabs/hardhat-ethers';
+import '@openzeppelin/hardhat-upgrades';
 dotenvConfig();
 
 const chainIds = {
