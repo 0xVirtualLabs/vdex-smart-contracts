@@ -131,6 +131,14 @@ const config: any = {
         }
       },
       {
+        network: "bscTestnet",
+        chainId: 97,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=97",
+          browserURL: "https://testnet.bscscan.com"
+        }
+      },
+      {
         network: "arbitrummainnet",
         chainId: 42161,
         urls: {
