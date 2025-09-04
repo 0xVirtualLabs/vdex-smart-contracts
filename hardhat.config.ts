@@ -26,6 +26,8 @@ const chainIds = {
   nibirumainnet: 6900,
   arbitrumtestnet: 421614,
   arbitrummainnet: 42161,
+  neondevnet: 245022926,
+  neonmainnet: 245022934,
 };
 
 // Ensure that we have all the environment variables we need.
@@ -74,6 +76,12 @@ function getChainConfig(network: keyof typeof chainIds): NetworkUserConfig {
   if (network === 'arbitrummainnet') {
     url = 'https://arb1.arbitrum.io/rpc';
   }
+  if (network === 'neondevnet') {
+    url = "https://devnet.neonevm.org";
+  }
+  if (network === 'neonmainnet') {
+    url =  "https://neon-proxy-mainnet.solana.p2p.org";
+  }
   return {
     accounts: [`0x${deployerPrivateKey}`],
     chainId: chainIds[network],
@@ -117,6 +125,8 @@ const config: any = {
     nibirumainnet: getChainConfig('nibirumainnet'),
     arbitrumSepolia: getChainConfig('arbitrumtestnet'),
     arbitrummainnet: getChainConfig('arbitrummainnet'),
+    neondevnet: getChainConfig('neondevnet'),
+    neonmainnet: getChainConfig('neonmainnet'),
   },
   etherscan: {
     // Your API key for Etherscan
@@ -153,6 +163,22 @@ const config: any = {
           apiURL: "https://api.etherscan.io/v2/api?chainid=42161",
           browserURL: "https://arbiscan.io"
         }
+      },
+      {
+        network: "neonevm",
+        chainId: 245022926,
+        urls: {
+          apiURL: "https://neon-devnet.blockscout.com/api",
+          browserURL: "https://neon-devnet.blockscout.com",
+        },
+      },
+      {
+        network: "neonevm",
+        chainId: 245022934,
+        urls: {
+          apiURL: "https://neon.blockscout.com/api",
+          browserURL: "https://neon.blockscout.com",
+        },
       }
     ],
   },
