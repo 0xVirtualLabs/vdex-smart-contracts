@@ -28,6 +28,8 @@ const chainIds = {
   arbitrummainnet: 42161,
   neondevnet: 245022926,
   neonmainnet: 245022934,
+  avalanchetestnet: 43113,
+  avalanchemainnet: 43114,
 };
 
 // Ensure that we have all the environment variables we need.
@@ -82,6 +84,12 @@ function getChainConfig(network: keyof typeof chainIds): NetworkUserConfig {
   if (network === 'neonmainnet') {
     url =  "https://neon-proxy-mainnet.solana.p2p.org";
   }
+  if (network === 'avalanchetestnet') {
+    url = "https://api.avax-test.network/ext/bc/C/rpc";
+  }
+  if (network === 'avalanchemainnet') {
+    url = "https://api.avax.network/ext/bc/C/rpc";
+  }
   return {
     accounts: [`0x${deployerPrivateKey}`],
     chainId: chainIds[network],
@@ -127,6 +135,8 @@ const config: any = {
     arbitrummainnet: getChainConfig('arbitrummainnet'),
     neondevnet: getChainConfig('neondevnet'),
     neonmainnet: getChainConfig('neonmainnet'),
+    avalanchetestnet: getChainConfig('avalanchetestnet'),
+    avalanchemainnet: getChainConfig('avalanchemainnet'),
   },
   etherscan: {
     // Your API key for Etherscan
@@ -179,6 +189,22 @@ const config: any = {
           apiURL: "https://neon.blockscout.com/api",
           browserURL: "https://neon.blockscout.com",
         },
+      },
+      {
+        network: "avalanchetestnet",
+        chainId: 43113,
+        urls: {
+          apiURL: "https://api.routescan.io/v2/network/testnet/evm/43113/etherscan",
+          browserURL: "https://testnet.snowtrace.io",
+        }
+      },
+      {
+        network: "avalanchemainnet",
+        chainId: 43114,
+        urls: {
+          apiURL: "https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan",
+          browserURL: "https://avalanche.routescan.io",
+        }
       }
     ],
   },
