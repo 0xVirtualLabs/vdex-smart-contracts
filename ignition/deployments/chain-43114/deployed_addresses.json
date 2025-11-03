@@ -1,0 +1,11 @@
+{
+  "VaultProxyModule#Crypto": "0x7Dd4e2749F8d7b59eb2dFc38c13Be361100Da871",
+  "VaultProxyModule#Vault": "0xABdC4955EAbFf73B8a795b717CD201F2eD738bEE",
+  "VaultProxyModule#TransparentUpgradeableProxy": "0x5dCC9975D9351b3BF1C25360FDDc539A7605b012",
+  "VaultProxyModule#VaultProxyInstance": "0x5dCC9975D9351b3BF1C25360FDDc539A7605b012",
+  "VaultProxyModule#ProxyAdmin": "0x3340E86f86f8dBfE3064Fbf021A585AFeAb93a26",
+  "ProxyModule#LpProvider": "0xDEfA40E17f5608a15Cb1E1891C8435f98D22Fe28",
+  "ProxyModule#TransparentUpgradeableProxy": "0x906a0b0d04Ad6119686C6dCDF6979960b8Fbf4C7",
+  "ProxyModule#LpProxyInstance": "0x906a0b0d04Ad6119686C6dCDF6979960b8Fbf4C7",
+  "ProxyModule#ProxyAdmin": "0x877A31EFE2a8cbDF018eE8B19eDBB8C35024c0E9"
+}

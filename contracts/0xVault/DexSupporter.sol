@@ -66,8 +66,9 @@ contract DexSupporter is Ownable {
         address _vault,
         address _supraVerifier,
         address _supraStorageOracle,
-        address _lpProvider
-    ) {
+        address _lpProvider,
+        address _initialOwner
+    ) Ownable(_initialOwner) {
         vault = IVault(_vault);
         supraVerifier = _supraVerifier;
         supraStorageOracle = _supraStorageOracle;

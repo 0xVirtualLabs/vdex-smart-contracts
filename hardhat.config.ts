@@ -1,9 +1,11 @@
-import "@nomicfoundation/hardhat-ignition-viem";
-import "@nomicfoundation/hardhat-toolbox-viem";
-import { config as dotenvConfig } from "dotenv";
-import "hardhat-contract-sizer";
-import { NetworkUserConfig } from "hardhat/types";
-import "solidity-docgen";
+import '@nomicfoundation/hardhat-ignition-viem';
+import '@nomicfoundation/hardhat-toolbox-viem';
+import { config as dotenvConfig } from 'dotenv';
+import 'hardhat-contract-sizer';
+import { NetworkUserConfig } from 'hardhat/types';
+import 'solidity-docgen';
+import '@nomiclabs/hardhat-ethers';
+import '@openzeppelin/hardhat-upgrades';
 dotenvConfig();
 
 const chainIds = {
@@ -20,41 +22,73 @@ const chainIds = {
   sepolia: 11155111,
   bitlayertestnet: 200810,
   seidevnet: 713715,
+  nibirutestnet: 6911,
+  nibirumainnet: 6900,
+  arbitrumtestnet: 421614,
+  arbitrummainnet: 42161,
+  neondevnet: 245022926,
+  neonmainnet: 245022934,
+  avalanchetestnet: 43113,
+  avalanchemainnet: 43114,
 };
 
 // Ensure that we have all the environment variables we need.
 const deployerPrivateKey: string | undefined = process.env.DEPLOYER_PRIVATE_KEY;
 if (!deployerPrivateKey) {
-  throw new Error("Please set your DEPLOYER_PRIVATE_KEY in a .env file");
+  throw new Error('Please set your DEPLOYER_PRIVATE_KEY in a .env file');
 }
 
 const infuraApiKey: string | undefined = process.env.INFURA_API_KEY;
 if (!infuraApiKey) {
-  throw new Error("Please set your INFURA_API_KEY in a .env file");
+  throw new Error('Please set your INFURA_API_KEY in a .env file');
 }
 
 function getChainConfig(network: keyof typeof chainIds): NetworkUserConfig {
-  let url: string = "https://" + network + ".infura.io/v3/" + infuraApiKey;
-  if (network === "polygon") {
-    url = "https://polygon-rpc.com";
+  let url: string = 'https://' + network + '.infura.io/v3/' + infuraApiKey;
+  if (network === 'polygon') {
+    url = 'https://polygon-rpc.com';
   }
-  if (network === "bsctestnet") {
-    url = "https://bsc-testnet-rpc.publicnode.com";
+  if (network === 'bsctestnet') {
+    url = 'https://bsc-testnet-rpc.publicnode.com';
   }
-  if (network === "bsc") {
-    url = "https://bsc-dataseed.binance.org/";
+  if (network === 'bsc') {
+    url = 'https://bsc-dataseed.binance.org/';
   }
-  if (network === "mumbai") {
-    url = "https://rpc-mumbai.maticvigil.com/";
+  if (network === 'mumbai') {
+    url = 'https://rpc-mumbai.maticvigil.com/';
   }
-  if (network === "sepolia") {
-    url = "https://ethereum-sepolia-rpc.publicnode.com";
+  if (network === 'sepolia') {
+    url = 'https://ethereum-sepolia-rpc.publicnode.com';
   }
-  if (network === "bitlayertestnet") {
-    url = "https://testnet-rpc.bitlayer.org";
+  if (network === 'bitlayertestnet') {
+    url = 'https://testnet-rpc.bitlayer.org';
   }
-  if (network === "seidevnet") {
-    url = "https://evm-rpc.arctic-1.seinetwork.io";
+  if (network === 'nibirutestnet') {
+    url = 'https://evm-rpc.testnet-2.nibiru.fi';
+  }
+  if (network === 'nibirumainnet') {
+    url = 'https://evm-rpc.nibiru.fi';
+  }
+  if (network === 'seidevnet') {
+    url = 'https://evm-rpc.arctic-1.seinetwork.io';
+  }
+  if (network === 'arbitrumtestnet') {
+    url = 'https://sepolia-rollup.arbitrum.io/rpc';
+  }
+  if (network === 'arbitrummainnet') {
+    url = 'https://arb1.arbitrum.io/rpc';
+  }
+  if (network === 'neondevnet') {
+    url = "https://devnet.neonevm.org";
+  }
+  if (network === 'neonmainnet') {
+    url =  "https://neon-proxy-mainnet.solana.p2p.org";
+  }
+  if (network === 'avalanchetestnet') {
+    url = "https://api.avax-test.network/ext/bc/C/rpc";
+  }
+  if (network === 'avalanchemainnet') {
+    url = "https://api.avax.network/ext/bc/C/rpc";
   }
   return {
     accounts: [`0x${deployerPrivateKey}`],
@@ -65,16 +99,16 @@ function getChainConfig(network: keyof typeof chainIds): NetworkUserConfig {
 }
 
 const config: any = {
-  defaultNetwork: "hardhat",
+  defaultNetwork: 'hardhat',
   gasReporter: {
-    currency: "USD",
+    currency: 'USD',
     enabled: process.env.REPORT_GAS ? true : false,
     excludeContracts: [],
-    src: "./contracts",
+    src: './contracts',
   },
   docgen: {
-    output: "docs",
-    pages: () => "api.md",
+    output: 'docs',
+    pages: () => 'api.md',
   },
   networks: {
     // hardhat: {
@@ -84,32 +118,109 @@ const config: any = {
     //   },
     //   allowUnlimitedContractSize: true,
     // },
-    goerli: getChainConfig("goerli"),
-    kovan: getChainConfig("kovan"),
-    rinkeby: getChainConfig("rinkeby"),
-    ropsten: getChainConfig("ropsten"),
-    polygon: getChainConfig("polygon"),
-    bsctestnet: getChainConfig("bsctestnet"),
-    bsc: getChainConfig("bsc"),
-    mumbai: getChainConfig("mumbai"),
-    sepolia: getChainConfig("sepolia"),
-    bitlayertestnet: getChainConfig("bitlayertestnet"),
-    seidevnet: getChainConfig("seidevnet"),
+    goerli: getChainConfig('goerli'),
+    kovan: getChainConfig('kovan'),
+    rinkeby: getChainConfig('rinkeby'),
+    ropsten: getChainConfig('ropsten'),
+    polygon: getChainConfig('polygon'),
+    bsctestnet: getChainConfig('bsctestnet'),
+    bsc: getChainConfig('bsc'),
+    mumbai: getChainConfig('mumbai'),
+    sepolia: getChainConfig('sepolia'),
+    bitlayertestnet: getChainConfig('bitlayertestnet'),
+    seidevnet: getChainConfig('seidevnet'),
+    nibirutestnet: getChainConfig('nibirutestnet'),
+    nibirumainnet: getChainConfig('nibirumainnet'),
+    arbitrumSepolia: getChainConfig('arbitrumtestnet'),
+    arbitrummainnet: getChainConfig('arbitrummainnet'),
+    neondevnet: getChainConfig('neondevnet'),
+    neonmainnet: getChainConfig('neonmainnet'),
+    avalanchetestnet: getChainConfig('avalanchetestnet'),
+    avalanchemainnet: getChainConfig('avalanchemainnet'),
   },
   etherscan: {
     // Your API key for Etherscan
-    apiKey: process.env.ETHERSCAN_API_KEY,
+    apiKey: "SKWZBKQSXE4856HD8AY99542WBNG32H1VE",
+    customChains: [
+      {
+        network: "arbitrumSepolia",
+        chainId: 421614,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=421614",
+          browserURL: "https://sepolia.arbiscan.io"
+        }
+      },
+      {
+        network: "bscTestnet",
+        chainId: 97,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=97",
+          browserURL: "https://testnet.bscscan.com"
+        }
+      },
+      {
+        network: "bsc",
+        chainId: 56,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=56",
+          browserURL: "https://bscscan.com"
+        }
+      },
+      {
+        network: "arbitrummainnet",
+        chainId: 42161,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=42161",
+          browserURL: "https://arbiscan.io"
+        }
+      },
+      {
+        network: "neonevm",
+        chainId: 245022926,
+        urls: {
+          apiURL: "https://neon-devnet.blockscout.com/api",
+          browserURL: "https://neon-devnet.blockscout.com",
+        },
+      },
+      {
+        network: "neonevm",
+        chainId: 245022934,
+        urls: {
+          apiURL: "https://neon.blockscout.com/api",
+          browserURL: "https://neon.blockscout.com",
+        },
+      },
+      {
+        network: "avalanchetestnet",
+        chainId: 43113,
+        urls: {
+          apiURL: "https://api.routescan.io/v2/network/testnet/evm/43113/etherscan",
+          browserURL: "https://testnet.snowtrace.io",
+        }
+      },
+      {
+        network: "avalanchemainnet",
+        chainId: 43114,
+        urls: {
+          apiURL: "https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan",
+          browserURL: "https://avalanche.routescan.io",
+        }
+      }
+    ],
   },
+  // sourcify: {
+  //   enabled: true
+  // },
   paths: {
-    artifacts: "./artifacts",
-    cache: "./cache",
-    sources: "./contracts",
-    tests: "./test",
+    artifacts: './artifacts',
+    cache: './cache',
+    sources: './contracts',
+    tests: './test',
   },
   solidity: {
     compilers: [
       {
-        version: "0.8.27",
+        version: '0.8.27',
         settings: {
           optimizer: {
             enabled: true,
@@ -118,7 +229,7 @@ const config: any = {
         },
       },
       {
-        version: "0.6.7",
+        version: '0.6.7',
         settings: {
           optimizer: {
             enabled: true,
