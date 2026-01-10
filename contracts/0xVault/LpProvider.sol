@@ -39,6 +39,7 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     mapping(address => mapping(address => ReqWithdraw)) public reqWithdraws; // Withdrawal requests for each user and token
 
     uint256 public navPrice; // Used for precision in calculations
+    mapping(address => mapping(address => uint256)) public claimableAmount; // user => token => amount
 
     // Structs
     struct ReqWithdraw {
@@ -135,7 +136,9 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address token,
         uint256 amount
     ) private view returns (uint256) {
-        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(pairId[token]);
+        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(
+            pairId[token]
+        );
         uint256 usdAmount = amount * oraclePrice.price;
         if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
@@ -158,7 +161,9 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address token,
         uint256 navAmount
     ) private view returns (uint256) {
-        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(pairId[token]);
+        IOracle.priceFeed memory oraclePrice = IOracle(oracle).getSvalue(
+            pairId[token]
+        );
         if (NAV_DECIMALS >= oraclePrice.decimals) {
             return
                 ((navAmount * navPrice) /
@@ -328,19 +333,31 @@ contract LpProvider is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @param amount The amount to decrease
      */
     function decreaseLpProvidedAmount(
+        address user,
+        address token,
+        uint256 amount
+    ) external onlyVault {
+        claimableAmount[user][token] += amount;
+    }
+
+    function claimTradeProfit(
+        address user,
         address token,
         uint256 amount
     ) external onlyVault {
         require(lpProvidedAmount[token] >= amount, "Insufficient LP amount");
+        require(claimableAmount[user][token] >= amount, "Insufficient claimable amount");
         require(IERC20(token).transfer(vault, amount), "Transfer failed");
         lpProvidedAmount[token] -= amount;
+        claimableAmount[user][token] -= amount;
+
         emit LPWithdrawn(address(this), token, amount);
     }
 
     // Owner-only functions
 
     /**
-     * 
+     *
      * @param token address of the token
      * @param isSupported boolean value indicating whether the token is supported
      */

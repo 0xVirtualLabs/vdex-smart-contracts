@@ -47,3 +47,16 @@ interface IPythOracle {
         bytes32 id
     ) external view returns (PriceFeed memory priceFeed);
 }
+
+
+interface IRedstoneOracle {
+    struct PriceFeed {
+        // The price ID.
+        bytes32 id;
+        uint256 price;
+    }
+
+    struct Price {
+        uint256 price;
+    }
+}

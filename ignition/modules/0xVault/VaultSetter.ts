@@ -16,13 +16,10 @@ const VaultSetter = buildModule("VaultSetter", (m) => {
   const { lpProvider } = m.useModule(LpProviderModule);
   const { dexSupporter } = m.useModule(DexSupporterModule);
 
-  m.call(vault, "setLpProvider", [lpProvider], {
+  m.call(vault, "setVaultParameters", [3600, dexSupporter, lpProvider], {
     from: proxyAdminOwner,
   });
 
-  m.call(vault, "setDexSupporter", [dexSupporter], {
-    from: proxyAdminOwner,
-  });
   // Return the contract instance, along with the original proxy and proxyAdmin contracts
   // so that they can be used by other modules, or in tests and scripts.
   return { vault };

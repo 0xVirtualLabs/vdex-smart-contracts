@@ -69,10 +69,7 @@ library Crypto {
 
     struct LiquidatedPosition {
         string positionId;
-        bytes[] updateData;
         bytes32[] priceIds;
-        uint64 minPublishTime;
-        uint64 maxPublishTime;
     }
 
     struct UpdateDispute {
