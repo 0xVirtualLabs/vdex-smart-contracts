@@ -6,7 +6,7 @@ import { buildWithdrawSchnorr } from "./helpers/schnorr";
 
 // Operator "combined public key" signing key (any valid secp256k1 scalar;
 // this is hardhat dev account #1's key). It is independent of the trader
-// account — it stands in for the off-chain MPC combined key.
+// account and stands in for the off-chain MPC combined key.
 const SIGNER_PRIV = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
 describe("Vault.withdrawSchnorr replay guard", () => {

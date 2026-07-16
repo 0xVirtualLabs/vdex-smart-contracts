@@ -92,7 +92,7 @@ export interface WithdrawPayload {
 
 /**
  * Build a valid `Crypto.SchnorrSignature` for `withdrawSchnorr`, whose `data`
- * is `abi.encode(trader, token, amount, timestamp, chainId)` — exactly what
+ * is `abi.encode(trader, token, amount, timestamp, chainId)`, exactly what
  * `Crypto.decodeSchnorrDataWithdraw` decodes.
  */
 export function buildWithdrawSchnorr(privHex: string, p: WithdrawPayload): SchnorrSig {
