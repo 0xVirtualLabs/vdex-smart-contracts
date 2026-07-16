@@ -167,6 +167,10 @@ contract Vault is
         address _combinedPublicKey,
         Crypto.SchnorrSignature calldata _schnorr
     ) external nonReentrant whenNotPaused {
+        if (_schnorrSignatureUsed[_schnorr.signature]) {
+            revert InvalidSchnorrSignature();
+        }
+
         Crypto.SchnorrDataWithdraw memory schnorrData = Crypto
             .decodeSchnorrDataWithdraw(_schnorr, combinedPublicKey[msg.sender]);
 
@@ -183,6 +187,9 @@ contract Vault is
         }
 
         combinedPublicKey[msg.sender] = _combinedPublicKey;
+
+        // Consume the signature before the external transfer (CEI) so it cannot be replayed.
+        _schnorrSignatureUsed[_schnorr.signature] = true;
 
         require(
             IERC20(schnorrData.token).transfer(msg.sender, schnorrData.amount),

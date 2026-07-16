@@ -17,6 +17,7 @@ contract DexSupporter is Ownable {
     address public pythOracle;
     address public lpProvider;
     uint256 constant ONE = 10 ^ 18;
+    mapping(bytes => bool) private _schnorrSignatureUsed;
 
     struct DisputeInfo {
         bool isOpenDispute;
@@ -340,6 +341,12 @@ contract DexSupporter is Ownable {
         ) {
             revert InvalidSchnorrSignature();
         }
+
+        // Prevent replay: a partial-liquidation signature may be consumed once.
+        if (_schnorrSignatureUsed[_schnorr.signature]) {
+            revert InvalidSchnorrSignature();
+        }
+        _schnorrSignatureUsed[_schnorr.signature] = true;
 
         // Initialize availableBalance
         uint256 len = data.balances.length;
